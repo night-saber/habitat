@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Verde — Landscaping, organised</title>
+<meta name="description" content="Verde connects land owners and gardeners: photo change requests, a live map of every job, and automatic translation." />
+<meta name="theme-color" content="#0b1410" />
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ============================== AUTH ============================== -->
+<div id="auth" class="auth-wrap">
+  <div class="auth-card">
+    <div class="brand-row">
+      <span class="logo">🌿</span>
+      <div>
+        <h1 data-i18n="app_name">Verde</h1>
+        <p class="tagline" data-i18n="tagline">Landscaping, organised.</p>
+      </div>
+      <label class="lang-mini">
+        <select id="authLang" aria-label="Language"></select>
+      </label>
+    </div>
+
+    <div id="authError" class="error" hidden></div>
+
+    <!-- login -->
+    <form id="loginForm" class="stack">
+      <label class="field">
+        <span data-i18n="email">Email</span>
+        <input type="email" name="email" autocomplete="email" required />
+      </label>
+      <label class="field">
+        <span data-i18n="password">Password</span>
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <button class="btn wide" type="submit" data-i18n="login">Log in</button>
+      <button class="btn ghost wide" type="button" id="demoBtn" data-i18n="demo_login">Try the demo</button>
+      <p class="swap">
+        <button type="button" class="link" id="toSignup" data-i18n="signup">Create account</button>
+      </p>
+    </form>
+
+    <!-- signup -->
+    <form id="signupForm" class="stack" hidden>
+      <label class="field">
+        <span data-i18n="name">Full name</span>
+        <input type="text" name="name" autocomplete="name" required />
+      </label>
+      <label class="field">
+        <span data-i18n="email">Email</span>
+        <input type="email" name="email" autocomplete="email" required />
+      </label>
+      <label class="field">
+        <span data-i18n="password">Password</span>
+        <input type="password" name="password" autocomplete="new-password" minlength="6" required />
+      </label>
+      <label class="field">
+        <span data-i18n="role">I am a</span>
+        <select name="role" required>
+          <option value="owner" data-i18n="owner">Land owner</option>
+          <option value="worker" data-i18n="worker">Gardener / worker</option>
+        </select>
+      </label>
+      <label class="field">
+        <span data-i18n="language">Primary language</span>
+        <select name="language" id="signupLang" required></select>
+      </label>
+      <button class="btn wide" type="submit" data-i18n="signup">Create account</button>
+      <p class="swap">
+        <button type="button" class="link" id="toLogin" data-i18n="login">Log in</button>
+      </p>
+    </form>
+  </div>
+  <p class="auth-foot">
+    Your account and photos are stored privately in this browser. No server, no tracking.
+  </p>
+</div>
+
+<!-- =============================== APP =============================== -->
+<div id="app" hidden>
+
+  <header class="topbar">
+    <div class="top-left">
+      <span class="logo sm">🌿</span>
+      <strong data-i18n="app_name">Verde</strong>
+    </div>
+    <div class="top-right">
+      <div class="who">
+        <span id="avatar" class="avatar">?</span>
+        <div class="who-text">
+          <b id="whoName">—</b>
+          <span id="whoRole" class="muted sm">—</span>
+        </div>
+      </div>
+      <label class="lang-mini">
+        <select id="userLang" aria-label="Language"></select>
+      </label>
+      <button class="btn ghost sm" id="logoutBtn" data-i18n="logout">Log out</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="navbtn active" data-view="dashboard" data-i18n="dashboard">Dashboard</button>
+    <button class="navbtn" data-view="properties" data-i18n="properties">Properties</button>
+    <button class="navbtn" data-view="tasks" data-i18n="tasks">Tasks</button>
+    <button class="navbtn" data-view="map" data-i18n="map">Map</button>
+    <button class="navbtn" data-view="photos" data-i18n="photos">Photos</button>
+    <button class="navbtn" data-view="settings" data-i18n="settings">Settings</button>
+  </nav>
+
+  <section class="stats">
+    <div class="stat"><b id="stProps">0</b><span data-i18n="stats_props">Properties</span></div>
+    <div class="stat"><b id="stOpen">0</b><span data-i18n="stats_open">Open tasks</span></div>
+    <div class="stat"><b id="stDone">0</b><span data-i18n="stats_done">Completed</span></div>
+    <div class="stat"><b id="stPhotos">0</b><span data-i18n="stats_photos">Photos</span></div>
+  </section>
+
+  <main class="main">
+    <div class="view" data-view="dashboard" id="dashBody"></div>
+    <div class="view" data-view="properties" id="propsBody" hidden></div>
+    <div class="view" data-view="tasks" id="tasksBody" hidden></div>
+    <div class="view" data-view="map" hidden>
+      <div class="row-between">
+        <h2 data-i18n="map">Map</h2>
+        <div class="map-controls">
+          <select id="mapProp" class="inline"></select>
+          <button class="btn ghost sm" id="useMyLoc" data-i18n="use_my_location">Use my location</button>
+        </div>
+      </div>
+      <div id="mapCanvas" class="map"></div>
+      <p class="muted sm" id="pinHint" hidden></p>
+    </div>
+    <div class="view" data-view="photos" id="photosBody" hidden></div>
+    <div class="view" data-view="settings" id="settingsBody" hidden></div>
+  </main>
+</div>
+
+<!-- ============================= MODALS ============================= -->
+<div class="modal" id="propModal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card">
+    <button class="x" data-close-modal>×</button>
+    <h3 data-i18n="add_property">Add property</h3>
+    <form id="propForm" class="stack">
+      <label class="field"><span data-i18n="property_name">Property name</span>
+        <input name="name" required /></label>
+      <label class="field"><span data-i18n="address">Address</span>
+        <input name="address" /></label>
+      <label class="field"><span data-i18n="notes">Notes</span>
+        <textarea name="notes" rows="2"></textarea></label>
+      <label class="field"><span data-i18n="location">Location</span>
+        <div class="inline-row">
+          <span id="propCoords" class="coord">—</span>
+          <button type="button" class="btn ghost sm" id="propUseLocation"
+                  data-i18n="use_my_location">Use my location</button>
+        </div>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close-modal data-i18n="cancel">Cancel</button>
+        <button type="submit" class="btn" data-i18n="save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="taskModal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card">
+    <button class="x" data-close-modal>×</button>
+    <h3 data-i18n="request_change">Request a change</h3>
+    <form id="taskForm" class="stack">
+      <label class="field"><span data-i18n="properties">Properties</span>
+        <select id="taskProp" required></select></label>
+      <label class="field"><span data-i18n="task_title">What needs doing?</span>
+        <input name="title" required /></label>
+      <label class="field"><span data-i18n="task_desc">Describe the change you want</span>
+        <textarea name="description" rows="3"></textarea></label>
+      <label class="field"><span data-i18n="priority">Priority</span>
+        <select name="priority">
+          <option value="high" data-i18n="high">High</option>
+          <option value="normal" selected data-i18n="normal">Normal</option>
+          <option value="low" data-i18n="low">Low</option>
+        </select></label>
+      <label class="field"><span data-i18n="take_photo">Take / choose a photo</span>
+        <input type="file" id="taskPhoto" accept="image/*" capture="environment" />
+        <div class="preview" id="taskPhotoPreview" hidden></div></label>
+      <label class="field"><span data-i18n="location">Location</span>
+        <div class="inline-row">
+          <span id="taskPinCoords" class="coord">—</span>
+          <button type="button" class="btn ghost sm" id="taskUseLocation"
+                  data-i18n="use_my_location">Use my location</button>
+        </div>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close-modal data-i18n="cancel">Cancel</button>
+        <button type="submit" class="btn" data-i18n="save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="assignModal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card">
+    <button class="x" data-close-modal>×</button>
+    <h3 data-i18n="assign_worker">Assign worker</h3>
+    <div id="assignList" class="assign-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" data-close-modal data-i18n="cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="photoModal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-card">
+    <button class="x" data-close-modal>×</button>
+    <h3 id="photoTitle">Photo</h3>
+    <label class="field"><span data-i18n="take_photo">Take / choose a photo</span>
+      <input type="file" id="photoFile" accept="image/*" capture="environment" />
+      <div class="preview" id="photoPreview" hidden></div></label>
+    <label class="field"><span data-i18n="caption">Caption</span>
+      <input id="photoCaption" /></label>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" data-close-modal data-i18n="cancel">Cancel</button>
+      <button type="button" class="btn" id="photoSave" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="lightbox" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="lightbox-card">
+    <button class="x" data-close-modal>×</button>
+    <img id="lightboxImg" alt="" />
+    <p id="lightboxCap"></p>
+    <p class="muted sm" id="lightboxMeta"></p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="js/app.js?v=5"></script>
+</body>
+</html>
