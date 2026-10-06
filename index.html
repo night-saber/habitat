@@ -11,13 +11,20 @@
 <meta name="description" content="Habitat connects property owners and trade workers: photo change requests, a live map of every job, crews, and automatic translation." />
 <meta name="theme-color" content="#0a1310" />
 <meta name="color-scheme" content="dark" />
+<meta property="og:title" content="Habitat — Property, organised" />
+<meta property="og:description" content="Connect property owners and trade workers: photo change requests, live map, crews, and automatic translation." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://night-saber.github.io/habitat/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Habitat — Property, organised" />
+<meta name="twitter:description" content="Connect property owners and trade workers: photo change requests, live map, crews, and automatic translation." />
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="assets/icon.svg" />
 <link rel="manifest" href="manifest.json" />
 <link rel="preconnect" href="https://unpkg.com" />
 <link rel="preconnect" href="https://tile.openstreetmap.org" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="css/style.css?v=11" />
+<link rel="stylesheet" href="css/style.css?v=12" />
 <script type="importmap">
 {
   "imports": {
@@ -29,6 +36,130 @@
 </head>
 <body>
 <a href="#main" class="sr-only" style="position:fixed;top:8px;left:8px;z-index:9999;background:var(--green);color:#04150f;padding:8px 16px;border-radius:8px;font-weight:600;">Skip to main content</a>
+
+<!-- ============================== LANDING ============================== -->
+<div id="landing" class="landing">
+  <nav class="landing-nav">
+    <div class="landing-brand">
+      <span class="logo" aria-hidden="true">🌿</span>
+      <span class="landing-brand-name">Habitat</span>
+    </div>
+    <div class="landing-nav-actions">
+      <button class="btn ghost sm" id="landingLoginBtn" data-i18n="login">Log in</button>
+      <button class="btn sm" id="landingSignupBtn" data-i18n="signup">Get Started</button>
+    </div>
+  </nav>
+
+  <header class="landing-hero">
+    <div class="landing-hero-content">
+      <h1 class="landing-title">
+        <span class="landing-title-icon">🌿</span>
+        Property, <span class="text-gradient">organised.</span>
+      </h1>
+      <p class="landing-subtitle">
+        Connect property owners and trade workers. Photo change requests, a live map of every job, crews, and automatic translation — all in one place.
+      </p>
+      <div class="landing-cta">
+        <button class="btn lg" id="landingGetStartedBtn" data-i18n="signup">Get Started Free</button>
+        <button class="btn ghost lg" id="landingDemoBtn">
+          <span class="play-icon">▶</span> Try Demo
+        </button>
+      </div>
+      <p class="landing-trust">No server · No tracking · Your data stays in your browser</p>
+    </div>
+    <div class="landing-hero-visual">
+      <div class="landing-preview-card">
+        <div class="preview-header">
+          <span class="preview-dot"></span>
+          <span class="preview-dot"></span>
+          <span class="preview-dot"></span>
+        </div>
+        <div class="preview-body">
+          <div class="preview-stat"><span class="preview-num">12</span><span class="preview-label">Properties</span></div>
+          <div class="preview-stat"><span class="preview-num">5</span><span class="preview-label">Open Tasks</span></div>
+          <div class="preview-stat"><span class="preview-num">8</span><span class="preview-label">Completed</span></div>
+          <div class="preview-bar"><div class="preview-bar-fill" style="width:67%"></div></div>
+          <div class="preview-tasks">
+            <div class="preview-task"><span class="preview-task-dot high"></span> Fix kitchen faucet</div>
+            <div class="preview-task"><span class="preview-task-dot normal"></span> Paint living room</div>
+            <div class="preview-task"><span class="preview-task-dot low"></span> Garden maintenance</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="landing-features">
+    <h2 class="landing-section-title">Everything you need to manage your property</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <h3>Task Management</h3>
+        <p>Create, assign, and track tasks with priorities, due dates, and photo documentation.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>Live Map</h3>
+        <p>See all your properties and tasks on an interactive map. Drop pins, track progress.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📷</div>
+        <h3>Photo Documentation</h3>
+        <p>Capture before/after photos, attach them to tasks, and build a visual history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>Crews & Workers</h3>
+        <p>Group workers into crews, assign them to properties, and manage your team.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <h3>Auto-Translation</h3>
+        <p>Communicate across languages with automatic task translation in 50+ languages.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>Mobile Ready</h3>
+        <p>Works on any device. Touch gestures, camera capture, and offline support.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-how">
+    <h2 class="landing-section-title">Get started in seconds</h2>
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="how-step-num">1</div>
+        <h3>Create an account</h3>
+        <p>Sign up as a property owner or trade worker. It takes 30 seconds.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">2</div>
+        <h3>Add your property</h3>
+        <p>Add your first property with address, photos, and details.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">3</div>
+        <h3>Create tasks</h3>
+        <p>Request changes, assign workers, and track everything on the map.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-cta-bottom">
+    <h2>Ready to get organised?</h2>
+    <div class="landing-cta">
+      <button class="btn lg" id="landingGetStartedBtn2" data-i18n="signup">Get Started Free</button>
+      <button class="btn ghost lg" id="landingDemoBtn2">
+        <span class="play-icon">▶</span> Try Demo
+      </button>
+    </div>
+  </section>
+
+  <footer class="landing-footer">
+    <p>Habitat — Property, organised. Your data stays in your browser.</p>
+  </footer>
+</div>
 
 <!-- ============================== AUTH ============================== -->
 <div id="auth" class="auth-wrap">
@@ -218,7 +349,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-<script type="module" src="js/app.js?v=15"></script>
+<script type="module" src="js/app.js?v=16"></script>
 <script type="module" src="js/mobile.js?v=1"></script>
 </body>
 </html>

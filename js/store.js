@@ -404,6 +404,120 @@ export const Store = {
 
   exportJSON() { return JSON.stringify(this.db, null, 2); },
 
+  /**
+   * Create a demo account with sample data for testing.
+   * Returns the demo user object.
+   */
+  async createDemoData() {
+    // Create demo owner
+    const owner = {
+      id: "demo_owner",
+      name: "Demo Owner",
+      email: "demo@habitat.app",
+      pw: await sha256("salt_demo" + "demo1234"),
+      salt: "salt_demo",
+      recoveryHash: null,
+      role: "owner",
+      language: "en",
+      trade: null,
+      active: true,
+      createdAt: new Date().toISOString(),
+      lastSeen: null,
+    };
+    this.db.users.push(owner);
+
+    // Create demo workers
+    const workers = [
+      { id: "demo_w1", name: "Alex Rivera", email: "alex@habitat.app", trade: "plumbing" },
+      { id: "demo_w2", name: "Sam Chen", email: "sam@habitat.app", trade: "electrical" },
+      { id: "demo_w3", name: "Jordan Lee", email: "jordan@habitat.app", trade: "landscaping" },
+      { id: "demo_w4", name: "Casey Kim", email: "casey@habitat.app", trade: "hvac" },
+    ];
+    for (const w of workers) {
+      this.db.users.push({
+        ...w,
+        pw: await sha256("salt_demo" + "demo1234"),
+        salt: "salt_demo",
+        recoveryHash: null,
+        role: "worker",
+        language: "en",
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastSeen: null,
+      });
+    }
+
+    // Create demo crew
+    const crew = {
+      id: "demo_crew1",
+      ownerId: owner.id,
+      name: "General Crew",
+      description: "All-purpose maintenance crew",
+      color: GROUP_COLORS[0],
+      memberIds: ["demo_w1", "demo_w2", "demo_w3"],
+      createdAt: new Date().toISOString(),
+    };
+    this.db.groups.push(crew);
+
+    // Create demo properties
+    const props = [
+      { id: "demo_p1", name: "Sunset Villa", address: "123 Sunset Dr, Los Angeles, CA", lat: 34.0522, lng: -118.2437 },
+      { id: "demo_p2", name: "Ocean View Apt", address: "456 Ocean Ave, Santa Monica, CA", lat: 34.0195, lng: -118.4912 },
+      { id: "demo_p3", name: "Downtown Loft", address: "789 Main St, Los Angeles, CA", lat: 34.0407, lng: -118.2468 },
+    ];
+    for (const p of props) {
+      this.db.properties.push({
+        ...p,
+        ownerId: owner.id,
+        notes: "Demo property for testing",
+        workers: ["demo_w1", "demo_w2"],
+        groups: [crew.id],
+        systemInfo: { roof_type: "Tile", year_built: "2015", square_footage: "2400" },
+        utilities: [{ id: "du1", type: "water", label: "Main Water", notes: "Street side" }],
+        documents: [],
+        rooms: [],
+        appliances: [],
+        materials: [],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Create demo tasks
+    const tasks = [
+      { id: "demo_t1", propertyId: "demo_p1", title: "Fix kitchen faucet", description: "The kitchen faucet is leaking and needs to be repaired.", priority: "high", status: "open", trade: "plumbing", assigneeId: "demo_w1", dueDate: new Date(Date.now() + 86400000 * 2).toISOString() },
+      { id: "demo_t2", propertyId: "demo_p1", title: "Paint living room", description: "Repaint the living room walls with a fresh coat of paint.", priority: "normal", status: "doing", trade: "general", assigneeId: null, dueDate: new Date(Date.now() + 86400000 * 5).toISOString() },
+      { id: "demo_t3", propertyId: "demo_p2", title: "Replace light fixtures", description: "Replace all light fixtures in the hallway and bedrooms.", priority: "normal", status: "open", trade: "electrical", assigneeId: "demo_w2", dueDate: new Date(Date.now() + 86400000 * 7).toISOString() },
+      { id: "demo_t4", propertyId: "demo_p2", title: "Garden maintenance", description: "Trim hedges, mow lawn, and clean up the garden area.", priority: "low", status: "done", trade: "landscaping", assigneeId: "demo_w3", dueDate: new Date(Date.now() - 86400000 * 3).toISOString() },
+      { id: "demo_t5", propertyId: "demo_p3", title: "HVAC inspection", description: "Annual HVAC system inspection and filter replacement.", priority: "high", status: "open", trade: "hvac", assigneeId: "demo_w4", dueDate: new Date(Date.now() + 86400000 * 1).toISOString() },
+      { id: "demo_t6", propertyId: "demo_p3", title: "Fix door lock", description: "The front door lock is sticking and needs lubrication or replacement.", priority: "normal", status: "doing", trade: "general", assigneeId: "demo_w1", dueDate: new Date(Date.now() + 86400000 * 3).toISOString() },
+    ];
+    for (const t of tasks) {
+      this.db.tasks.push({
+        ...t,
+        createdBy: owner.id,
+        lat: null,
+        lng: null,
+        photoId: null,
+        completionPhotoId: null,
+        createdAt: new Date(Date.now() - 86400000 * Math.random() * 7).toISOString(),
+        completedAt: t.status === "done" ? new Date(Date.now() - 86400000 * 2).toISOString() : null,
+        completedBy: t.status === "done" ? t.assigneeId : null,
+        comments: [],
+      });
+    }
+
+    // Create demo activity
+    this.db.activity = [
+      { id: "da1", at: new Date(Date.now() - 3600000).toISOString(), userId: owner.id, action: "account.login", meta: {} },
+      { id: "da2", at: new Date(Date.now() - 7200000).toISOString(), userId: owner.id, action: "task.created", meta: { title: "Fix kitchen faucet" } },
+      { id: "da3", at: new Date(Date.now() - 86400000).toISOString(), userId: owner.id, action: "property.created", meta: { name: "Sunset Villa" } },
+    ];
+
+    this.reindex();
+    this.save();
+    return this.publicUser(owner);
+  },
+
   importJSON(text) {
     const d = JSON.parse(text);
     if (!d || !Array.isArray(d.users)) throw new Error("bad_file");

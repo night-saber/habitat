@@ -39,23 +39,38 @@ const PAGE_SIZE = 12;
 
 /* ---------------------------------------------------------------- boot */
 function boot() {
-  Store.load();
-  initWorkerMode();
-  initPropertyInfo(render, () => ME);
-  const sid = Store.session();
-  if (sid) {
-    const u = Store.user(sid);
-    if (u && u.active) {
-      ME = u;
-      setLang(ME.language);
-      return showApp();
+  try {
+    Store.load();
+    initWorkerMode();
+    initPropertyInfo(render, () => ME);
+    const sid = Store.session();
+    if (sid) {
+      const u = Store.user(sid);
+      if (u && u.active) {
+        ME = u;
+        setLang(ME.language);
+        return showApp();
+      }
+      Store.setSession(null);
     }
-    Store.setSession(null);
+    showLanding();
+  } catch (e) {
+    console.error("Boot failed", e);
+    document.body.innerHTML = '<div style="display:grid;place-items:center;min-height:100vh;background:#08110e;color:#e9f3ed;font-family:system-ui;text-align:center;padding:24px;"><div><h1 style="margin-bottom:12px;">⚠️ Something went wrong</h1><p style="color:#94b4a4;margin-bottom:20px;">Please clear your browser data and try again.</p><button onclick="location.reload()" style="background:#34d399;color:#04150f;border:none;padding:12px 24px;border-radius:10px;font-weight:700;cursor:pointer;">Reload</button></div></div>';
   }
-  showAuth();
+}
+
+/* ------------------------------------------------------- landing page */
+function showLanding() {
+  $("#app").hidden = true;
+  $("#auth").hidden = true;
+  $("#landing").hidden = false;
+  applyStaticI18n($("#landing"));
+  wireLanding();
 }
 
 function showAuth() {
+  $("#landing").hidden = true;
   $("#app").hidden = true;
   $("#auth").hidden = false;
   $("#authPanel").hidden = false;
@@ -67,7 +82,48 @@ function showAuth() {
   applyStaticI18n($("#auth"));
 }
 
+function wireLanding() {
+  // Login button → show auth with login form
+  $("#landingLoginBtn").onclick = () => {
+    showAuth();
+  };
+
+  // Signup / Get Started buttons → show auth with signup form
+  const showSignup = () => {
+    showAuth();
+    $("#loginForm").hidden = true;
+    $("#signupForm").hidden = false;
+    $("#resetForm").hidden = true;
+    applyStaticI18n($("#auth"));
+  };
+  $("#landingSignupBtn").onclick = showSignup;
+  $("#landingGetStartedBtn").onclick = showSignup;
+  $("#landingGetStartedBtn2").onclick = showSignup;
+
+  // Demo buttons → create demo account and login
+  const doDemo = async () => {
+    try {
+      // Check if demo data already exists
+      let demoUser = Store.user("demo_owner");
+      if (!demoUser) {
+        demoUser = await Store.createDemoData();
+      }
+      Store.setSession(demoUser.id);
+      ME = demoUser;
+      setLang(ME.language);
+      showApp();
+      toast("Demo account loaded with sample data", "good");
+    } catch (e) {
+      console.error("Demo failed:", e);
+      toast("Could not create demo account", "bad");
+    }
+  };
+  $("#landingDemoBtn").onclick = doDemo;
+  $("#landingDemoBtn2").onclick = doDemo;
+}
+
 function showApp() {
+  $("#landing").hidden = true;
   $("#auth").hidden = true;
   $("#app").hidden = false;
   applyStaticI18n($("#app"));
@@ -84,6 +140,196 @@ function showApp() {
   }
   buildNav();
   go("dashboard");
+  // Show demo banner if this is a demo account
+  if (ME.id === "demo_owner") {
+    showDemoBanner();
+  }
+}
+
+/* ------------------------------------------------------- demo banner */
+function showDemoBanner() {
+  const dash = $("#dashMain");
+  if (!dash) return;
+  const banner = el("div", "demo-banner");
+  banner.innerHTML = `
+    <span class="demo-banner-icon">🧪</span>
+    <span class="demo-banner-text"><b>Demo Mode</b> — You're using a test account with sample data. <a href="#" id="demoResetLink" style="color:var(--green)">Reset demo data</a></span>
+    <button class="demo-banner-btn" id="demoExploreBtn">Explore</button>
+  `;
+  dash.insertBefore(banner, dash.firstChild);
+  $("#demoExploreBtn").onclick = () => {
+    banner.remove();
+  };
+  $("#demoResetLink").onclick = (e) => {
+    e.preventDefault();
+    Store.reset();
+    boot();
+  };
+}
+
+/* ------------------------------------------------------- tutorial */
+const TUTORIAL_STEPS = [
+  {
+    target: "#dashMain",
+    title: "Welcome to Habitat! 👋",
+    text: "This is your dashboard. Here you'll see an overview of all your properties, tasks, and recent activity. Let's take a quick tour!",
+  },
+  {
+    target: "#tabs",
+    title: "Navigation",
+    text: "Use these tabs to move between sections: Dashboard, Tasks, Map, People, and Settings. Each section has its own subtabs.",
+  },
+  {
+    target: "#dashMain",
+    title: "Your Dashboard",
+    text: "The dashboard shows overdue tasks, in-progress work, and open tasks at a glance. You can also see your completion stats at the top.",
+  },
+  {
+    target: "#tasksBody",
+    title: "Creating Tasks",
+    text: "Go to the Tasks tab to create new tasks. You can set priorities, assign workers, add due dates, and attach photos. Try creating your first task!",
+  },
+  {
+    target: "#mapCanvas",
+    title: "The Map",
+    text: "The Map shows all your properties and tasks geographically. Click anywhere to drop a pin, or use 'Use my location' to center on your position.",
+  },
+  {
+    target: "#photosBody",
+    title: "Photos & Scanning",
+    text: "In the Photos subtab, you can view all photos. The Scan tab lets you create 3D scans of your properties using your device's camera.",
+  },
+  {
+    target: "#settingsBody",
+    title: "Settings",
+    text: "In Settings you can update your profile, change your language, manage your recovery code, and export or import your data.",
+  },
+  {
+    target: "#whoName",
+    title: "You're all set! 🎉",
+    text: "That's the basics! You can always access this tutorial again from Settings. Enjoy using Habitat!",
+  },
+];
+
+let tutorialStep = 0;
+let tutorialActive = false;
+
+function startTutorial() {
+  tutorialActive = true;
+  tutorialStep = 0;
+  showTutorialStep();
+}
+
+function showTutorialStep() {
+  if (!tutorialActive) return;
+  const step = TUTORIAL_STEPS[tutorialStep];
+  if (!step) {
+    endTutorial();
+    return;
+  }
+
+  // Remove existing tutorial elements
+  document.querySelectorAll(".tutorial-overlay, .tutorial-spotlight, .tutorial-tooltip").forEach(n => n.remove());
+
+  // Find target element
+  const target = document.querySelector(step.target);
+  if (!target) {
+    // Skip this step if target not visible
+    tutorialStep++;
+    showTutorialStep();
+    return;
+  }
+
+  // Make sure target is visible
+  if (target.hidden) {
+    // Try to navigate to the right view
+    if (step.target === "#tasksBody") go("tasks");
+    else if (step.target === "#mapCanvas") go("map");
+    else if (step.target === "#photosBody") { subtab = "photos"; go("map"); }
+    else if (step.target === "#settingsBody") go("settings");
+    else if (step.target === "#dashMain") go("dashboard");
+  }
+
+  // Wait a moment for view to render
+  setTimeout(() => {
+    const target = document.querySelector(step.target);
+    if (!target || target.hidden) {
+      tutorialStep++;
+      showTutorialStep();
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+
+    // Create overlay
+    const overlay = el("div", "tutorial-overlay");
+    overlay.id = "tutorialOverlay";
+
+    // Create spotlight
+    const spotlight = el("div", "tutorial-spotlight");
+    spotlight.style.top = (rect.top - 8) + "px";
+    spotlight.style.left = (rect.left - 8) + "px";
+    spotlight.style.width = (rect.width + 16) + "px";
+    spotlight.style.height = (rect.height + 16) + "px";
+
+    // Create tooltip
+    const tooltip = el("div", "tutorial-tooltip");
+    tooltip.innerHTML = `
+      <h3>${step.title}</h3>
+      <p>${step.text}</p>
+      <div class="tutorial-actions">
+        <div class="tutorial-dots">
+          ${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : ""}"></span>`).join("")}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="tutorial-skip" id="tutorialSkip">Skip</button>
+          <button class="btn tutorial-next" id="tutorialNext">${tutorialStep < TUTORIAL_STEPS.length - 1 ? "Next" : "Finish"}</button>
+        </div>
+      </div>
+    `;
+
+    // Position tooltip
+    const tooltipWidth = 380;
+    const tooltipHeight = 200;
+    let tx = rect.left + rect.width / 2 - tooltipWidth / 2;
+    let ty = rect.bottom + 16;
+
+    // Keep tooltip on screen
+    tx = Math.max(16, Math.min(tx, window.innerWidth - tooltipWidth - 16));
+    if (ty + tooltipHeight > window.innerHeight - 16) {
+      ty = rect.top - tooltipHeight - 16;
+    }
+    if (ty < 16) ty = 16;
+
+    tooltip.style.top = ty + "px";
+    tooltip.style.left = tx + "px";
+
+    overlay.appendChild(spotlight);
+    overlay.appendChild(tooltip);
+    document.body.appendChild(overlay);
+
+    // Wire buttons
+    $("#tutorialSkip").onclick = endTutorial;
+    $("#tutorialNext").onclick = () => {
+      tutorialStep++;
+      if (tutorialStep >= TUTORIAL_STEPS.length) {
+        endTutorial();
+      } else {
+        showTutorialStep();
+      }
+    };
+  }, 100);
+}
+
+function endTutorial() {
+  tutorialActive = false;
+  document.querySelectorAll(".tutorial-overlay, .tutorial-spotlight, .tutorial-tooltip").forEach(n => n.remove());
+  // Mark tutorial as seen
+  try { localStorage.setItem("habitat.tutorial_seen", "1"); } catch { /* ignore */ }
+}
+
+function shouldShowTutorial() {
+  try { return !localStorage.getItem("habitat.tutorial_seen"); } catch { return false; }
 }
 
 /* ------------------------------------------------------------- nav tabs */
@@ -1201,6 +1447,17 @@ function renderSettings() {
   }
   wrap.appendChild(stor);
 
+  /* tutorial */
+  const tut = el("div", "card");
+  tut.appendChild(el("h3", null, "Tutorial"));
+  tut.appendChild(el("p", "muted sm", "Take a quick tour of Habitat to learn how to use all the features."));
+  const tutActions = el("div", "card-actions");
+  tutActions.appendChild(btn("Take Tour", "btn ghost sm", () => {
+    startTutorial();
+  }));
+  tut.appendChild(tutActions);
+  wrap.appendChild(tut);
+
   /* data */
   const data = el("div", "card");
   data.appendChild(el("h3", null, t("export_data")));
@@ -1631,6 +1888,10 @@ async function doSignup(e) {
     setLang(user.language);
     showApp();
     showRecoveryCode(recoveryCode, true);
+    // Show tutorial for new users
+    if (shouldShowTutorial()) {
+      setTimeout(() => startTutorial(), 500);
+    }
   } catch (err) {
     authError(err.message || "missing_fields");
   }
@@ -1639,6 +1900,8 @@ async function doSignup(e) {
 async function doLogin(e) {
   e.preventDefault();
   const f = e.target;
+  const btn = f.querySelector('button[type=submit]');
+  if (btn) { btn.disabled = true; btn.textContent = t("loading") || "Loading…"; }
   try {
     const u = await Store.login(f.email.value, f.password.value);
     Store.setSession(u.id);
@@ -1647,6 +1910,8 @@ async function doLogin(e) {
     showApp();
   } catch (err) {
     authError(err.message || "no_account");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t("login"); }
   }
 }
 
@@ -1670,7 +1935,7 @@ function logout() {
   ME = null;
   if (map) { map.remove(); map = null; }
   markers = [];
-  showAuth();
+  showLanding();
 }
 
 /* --------------------------------------------------------- translation */
