@@ -9,6 +9,15 @@ import {
   openModal, closeModal, closeTopModal, modal, toast, paginate, debounce,
   relTime, dateLabel, dueLabel, initial, avatarColour, compressImage, copyText,
 } from "./ui.js";
+import { renderPropertyInfo, buildPropertyDetail, initPropertyInfo } from "./property-info.js";
+import { createScanner } from "./scanner.js";
+import {
+  initWorkerMode, addWorkerModeToggle, addQuickPhrasesButton,
+  addReadAloudButton, translateWithTrade, postProcessTradeTranslation,
+  PHRASE_TRADES,
+} from "./worker-comms.js";
+import { TRADES, tradeById, tradeColor, tradeName, tradeIcon, translateTaskForTrade } from "./trades.js";
+import { initMobile, vibrate } from "./mobile.js";
 
 /* ---------------------------------------------------------------- state */
 let ME = null;
@@ -16,18 +25,22 @@ let view = "dashboard";
 let activeProperty = null;
 let query = "";
 let taskFilter = "all";
+let taskTradeFilter = "all";
 let taskSort = "priority";
 let map = null, markers = [], pinLayer = null;
 let pendingPin = null;
 let pendingPhoto = null;
 let page = { tasks: 1 };
 let editingTaskId = null;
+let scanner = null;
 
 const PAGE_SIZE = 12;
 
 /* ---------------------------------------------------------------- boot */
 function boot() {
   Store.load();
+  initWorkerMode();
+  initPropertyInfo(render, () => ME);
   const sid = Store.session();
   if (sid) {
     const u = Store.user(sid);
@@ -63,6 +76,11 @@ function showApp() {
   const av = $("#avatar");
   av.textContent = initial(ME.name);
   av.style.background = avatarColour(ME.id);
+  // Add worker mode toggle to header
+  const topRight = $(".top-right");
+  if (topRight && !topRight.querySelector(".worker-mode-toggle")) {
+    addWorkerModeToggle(topRight);
+  }
   buildNav();
   go("dashboard");
 }
@@ -72,7 +90,7 @@ function buildNav() {
   const nav = $("#tabs");
   nav.innerHTML = "";
   const tabs = ME.role === "owner"
-    ? ["dashboard", "properties", "tasks", "crews", "people", "map", "photos", "activity"]
+    ? ["dashboard", "properties", "tasks", "crews", "people", "map", "photos", "activity", "scan"]
     : ["dashboard", "properties", "tasks", "map", "photos"];
   tabs.forEach((v) => {
     const b = btn(t(v), "navbtn", () => go(v));
@@ -111,6 +129,7 @@ function render() {
   else if (view === "photos") renderPhotos();
   else if (view === "activity") renderActivity();
   else if (view === "settings") renderSettings();
+  else if (view === "scan") renderScanner();
   applyStaticI18n($("#app"));
   autoTranslateContent();
 }
@@ -137,6 +156,7 @@ function renderStats() {
 function taskCard(task, opts = {}) {
   const prop = Store.property(task.propertyId);
   const card = el("article", `card task-card pri-${task.priority} st-${task.status}`);
+  card.dataset.taskId = task.id;
 
   const head = el("div", "task-head");
   const left = el("div", "task-head-left");
@@ -163,6 +183,19 @@ function taskCard(task, opts = {}) {
       meta.appendChild(chip);
     }
   }
+  if (task.trade) {
+    const tb = el("span", "trade-badge");
+    const tr = tradeById(task.trade);
+    if (tr) {
+      tb.style.background = tr.color + "22";
+      tb.style.color = tr.color;
+      tb.style.borderColor = tr.color + "55";
+      tb.textContent = `${tr.icon} ${tr.name}`;
+    } else {
+      tb.textContent = task.trade;
+    }
+    meta.appendChild(tb);
+  }
   if (task.comments && task.comments.length) {
     meta.appendChild(el("span", "muted sm", `💬 ${task.comments.length}`));
   }
@@ -173,6 +206,7 @@ function taskCard(task, opts = {}) {
     p.textContent = task.description;
     p.dataset.autoTranslate = "1";
     card.appendChild(p);
+    addReadAloudButton(p, task.description);
   }
 
   const imgs = el("div", "task-imgs");
@@ -185,6 +219,7 @@ function taskCard(task, opts = {}) {
   const acts = el("div", "card-actions");
   if (task.status === "open") {
     acts.appendChild(btn(t("start"), "btn sm ghost", () => {
+      vibrate(10);
       Store.setTaskStatus(task.id, "doing", ME.id);
       render();
     }));
@@ -193,6 +228,7 @@ function taskCard(task, opts = {}) {
     acts.appendChild(btn(t("mark_done"), "btn sm", () => completeTask(task)));
   } else {
     acts.appendChild(btn(t("reopen"), "btn sm ghost", () => {
+      vibrate(10);
       Store.setTaskStatus(task.id, "open", ME.id);
       render();
     }));
@@ -245,6 +281,7 @@ function commentBlock(task) {
   inp.setAttribute("data-i18n-ph", "add_comment");
   form.appendChild(inp);
   form.appendChild(btn(t("post"), "btn sm", null, { type: "submit" }));
+  addQuickPhrasesButton(form, inp);
   form.onsubmit = (e) => {
     e.preventDefault();
     if (!inp.value.trim()) return;
@@ -279,6 +316,7 @@ function removeTask(task) {
 
 /* -------------------------------------------------------- complete task */
 function completeTask(task) {
+  vibrate(15);
   pendingPhoto = null;
   const body = el("div", "stack");
   const preview = el("div", "preview");
@@ -456,6 +494,13 @@ function renderProperties() {
     acts.appendChild(btn(t("tasks"), "btn ghost sm", () => {
       activeProperty = p.id; go("tasks");
     }));
+    acts.appendChild(btn(t("property_info"), "btn ghost sm", () => {
+      const detail = buildPropertyDetail(p.id);
+      const wrap = el("div", "property-info-view");
+      wrap.appendChild(detail);
+      $("#propsBody").innerHTML = "";
+      $("#propsBody").appendChild(wrap);
+    }));
     if (ME.role === "owner") {
       acts.appendChild(btn(t("assign_crew"), "btn ghost sm", () => openAssignModal(p.id)));
       acts.appendChild(btn(t("edit"), "btn ghost sm", () => openPropertyModal(p)));
@@ -525,6 +570,20 @@ function renderTasks() {
   });
   wrap.appendChild(filter);
 
+  // trade filter chips
+  const tradeFilter = el("div", "filters");
+  const tradeChips = [{ value: "all", label: t("all"), icon: null }, ...TRADES.map((tr) => ({ value: tr.id, label: tr.name, icon: tr.icon }))];
+  tradeChips.forEach((tc) => {
+    const b = btn(tc.icon ? `${tc.icon} ${tc.label}` : tc.label, "chip" + (taskTradeFilter === tc.value ? " on" : ""), () => {
+      taskTradeFilter = tc.value;
+      $$(".chip", tradeFilter).forEach((c) => c.classList.remove("on"));
+      b.classList.add("on");
+      drawTaskList(wrap);
+    });
+    tradeFilter.appendChild(b);
+  });
+  wrap.appendChild(tradeFilter);
+
   const list = el("div", "task-list");
   list.id = "taskList";
   wrap.appendChild(list);
@@ -538,6 +597,7 @@ function drawTaskList(root) {
   let tasks = Store.tasksForUser(ME);
   if (activeProperty) tasks = tasks.filter((x) => x.propertyId === activeProperty);
   if (taskFilter !== "all") tasks = tasks.filter((x) => x.status === taskFilter);
+  if (taskTradeFilter !== "all") tasks = tasks.filter((x) => x.trade === taskTradeFilter);
 
   if (query.trim()) {
     const q = query.trim().toLowerCase();
@@ -866,6 +926,15 @@ function focusTask(task) {
   setTimeout(() => map.setView([task.lat, task.lng], 17), 120);
 }
 
+/* ------------------------------------------------------------- scanner */
+function renderScanner() {
+  const wrap = $("#scanBody");
+  if (!wrap) return;
+  if (!scanner) {
+    scanner = createScanner(wrap, { userId: ME.id });
+  }
+}
+
 /* ----------------------------------------------------------- settings */
 function renderSettings() {
   const wrap = $("#settingsBody");
@@ -883,9 +952,14 @@ function renderSettings() {
     selected: l.code === ME.language,
   })));
   prof.appendChild(field("language", langSel));
+  const tradeSel = select("trade", TRADES.map((tr) => ({
+    value: tr.id, label: t("trade_" + tr.id),
+    selected: (ME.trade || "general") === tr.id,
+  })));
+  prof.appendChild(field("trade", tradeSel));
   const pactions = el("div", "card-actions");
   pactions.appendChild(btn(t("save"), "btn sm", () => {
-    Store.updateProfile(ME.id, { name: nm.value, language: langSel.value });
+    Store.updateProfile(ME.id, { name: nm.value, language: langSel.value, trade: tradeSel.value });
     ME = Store.user(ME.id);
     setLang(ME.language);
     buildNav();
@@ -1095,6 +1169,13 @@ function openTaskModal(existing = null) {
   ]);
   body.appendChild(field("priority", prio));
 
+  const tradeSel = select("trade", TRADES.map((tr) => ({
+    value: tr.id,
+    label: `${tr.icon} ${tr.name}`,
+    selected: existing ? existing.trade === tr.id : tr.id === "general",
+  })));
+  body.appendChild(field("trade", tradeSel));
+
   // assignee: crew members of the chosen property, or anyone
   const asgSel = select("assignee", [{ value: "", label: t("anyone") }]);
   function fillAssignees() {
@@ -1183,6 +1264,7 @@ function openTaskModal(existing = null) {
       assigneeId: asgSel.value || null,
       dueDate: due.value || null,
       photoId,
+      trade: tradeSel.value,
       lat: pendingPin ? pendingPin.lat : (existing ? existing.lat : null),
       lng: pendingPin ? pendingPin.lng : (existing ? existing.lng : null),
     };
@@ -1363,9 +1445,11 @@ async function doSignup(e) {
   e.preventDefault();
   const f = e.target;
   try {
+    const tradeField = $("#signupTradeField");
+    const trade = tradeField && !tradeField.hidden ? f.trade.value : null;
     const { user, recoveryCode } = await Store.signup({
       name: f.name.value, email: f.email.value, password: f.password.value,
-      role: f.role.value, language: f.language.value,
+      role: f.role.value, language: f.language.value, trade,
     });
     Store.setSession(user.id);
     ME = user;
@@ -1425,8 +1509,10 @@ async function autoTranslateContent() {
     const out = await translateAll(texts, getLang());
     nodes.forEach((n, i) => {
       if (!n.dataset.orig) n.dataset.orig = texts[i];
-      if (out[i] !== texts[i]) {
-        n.textContent = out[i];
+      // Apply trade-specific post-processing to handle jargon
+      const processed = postProcessTradeTranslation(out[i], getLang());
+      if (processed !== texts[i]) {
+        n.textContent = processed;
         n.classList.add("translated");
       }
     });
@@ -1486,6 +1572,15 @@ function wire() {
     applyStaticI18n($("#auth"));
   };
 
+  // Show/hide trade field based on role selection
+  const roleSel = $("#signupForm select[name=role]");
+  const tradeField = $("#signupTradeField");
+  if (roleSel && tradeField) {
+    roleSel.onchange = () => {
+      tradeField.hidden = roleSel.value !== "worker";
+    };
+  }
+
   const ul = $("#userLang");
   if (ul) {
     ul.onchange = () => {
@@ -1530,6 +1625,34 @@ function wire() {
       const s = $("#tasksBody .search");
       if (s) s.focus();
     }
+  });
+
+  // ------------------------------------------------------- mobile events
+  // Quick complete from swipe-left gesture
+  document.addEventListener("verde:quickComplete", (e) => {
+    const task = Store.task(e.detail.taskId);
+    if (!task || task.status === "done") return;
+    Store.setTaskStatus(task.id, "done", ME.id);
+    vibrate([30, 50, 30]);
+    toast(t("mark_done"), "good");
+    render();
+  });
+
+  // Cycle status from swipe-right gesture
+  document.addEventListener("verde:cycleStatus", (e) => {
+    const task = Store.task(e.detail.taskId);
+    if (!task) return;
+    const next = task.status === "open" ? "doing" : task.status === "doing" ? "done" : "open";
+    Store.setTaskStatus(task.id, next, ME.id);
+    vibrate(20);
+    toast(t("status") + ": " + t(next), "info");
+    render();
+  });
+
+  // Pull-to-refresh
+  document.addEventListener("verde:refresh", () => {
+    render();
+    toast(t("saved"), "good");
   });
 }
 

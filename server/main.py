@@ -20,6 +20,9 @@ Design notes
 * Tenant isolation is enforced in the query layer: every read of a property,
   task or photo joins through the caller's membership. There is no endpoint
   that returns another owner's data.
+* WebSocket connections at /ws deliver real-time task updates and
+  notifications to connected clients.
+* A simple in-memory rate limiter protects against abuse.
 
 Run
 ---
@@ -35,12 +38,15 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Iterator, Literal, Optional
+from typing import Annotated, Any, Iterator, Literal, Optional
 
 from fastapi import (
-    Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status,
+    Depends, FastAPI, File, HTTPException, Query, Request, UploadFile,
+    WebSocket, WebSocketDisconnect, status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -64,6 +70,10 @@ MEDIA_ROOT = os.environ.get("VERDE_MEDIA", "./media")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024          # 8 MB per photo
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 DATABASE_URL = os.environ.get("VERDE_DB", "sqlite:///./verde.db")
+
+# Rate limiting
+RATE_LIMIT_REQUESTS = int(os.environ.get("VERDE_RATE_LIMIT", "100"))
+RATE_LIMIT_WINDOW = int(os.environ.get("VERDE_RATE_WINDOW", "60"))  # seconds
 
 os.makedirs(MEDIA_ROOT, exist_ok=True)
 
@@ -179,6 +189,7 @@ class Task(Base):
     __table_args__ = (
         Index("ix_task_prop_status", "property_id", "status"),
         Index("ix_task_due", "due_date"),
+        Index("ix_task_trade", "trade"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -189,6 +200,7 @@ class Task(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     priority: Mapped[str] = mapped_column(String(10), default="normal", index=True)
     status: Mapped[str] = mapped_column(String(10), default="open", index=True)
+    trade: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, index=True)
     lat: Mapped[Optional[float]] = mapped_column(nullable=True)
     lng: Mapped[Optional[float]] = mapped_column(nullable=True)
     due_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
@@ -222,6 +234,37 @@ class Comment(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Notification(Base):
+    """In-app notification for task assignments and other events."""
+    __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notif_user_read", "user_id", "read"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(40))  # task_assigned, task_updated, task_completed, etc.
+    message: Mapped[str] = mapped_column(Text)
+    task_id: Mapped[Optional[str]] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    property_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class PropertyInfo(Base):
+    """Sub-resource for property system info, utilities, and documents."""
+    __tablename__ = "property_info"
+    __table_args__ = (
+        UniqueConstraint("property_id", "kind", "title", name="uq_prop_info"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # systemInfo | utilities | documents
+    title: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 
 Base.metadata.create_all(engine)
@@ -347,6 +390,41 @@ def assert_can_read_property(db: Session, user: User, property_id: str) -> Prope
     return prop
 
 
+# ---------------------------------------------------------- rate limiter
+class RateLimiter:
+    """
+    Simple in-memory sliding-window rate limiter.
+    Tracks request timestamps per client key (IP or user ID).
+    """
+
+    def __init__(self, max_requests: int, window_seconds: int):
+        self.max_requests = max_requests
+        self.window = window_seconds
+        self._requests: dict[str, list[float]] = defaultdict(list)
+
+    def is_allowed(self, key: str) -> bool:
+        """Check if a request from `key` is allowed. Records the attempt."""
+        now = time.monotonic()
+        cutoff = now - self.window
+        # Clean old entries
+        self._requests[key] = [t for t in self._requests[key] if t > cutoff]
+        if len(self._requests[key]) >= self.max_requests:
+            return False
+        self._requests[key].append(now)
+        return True
+
+    def cleanup(self) -> None:
+        """Remove stale entries to prevent memory growth."""
+        now = time.monotonic()
+        cutoff = now - self.window
+        stale = [k for k, v in self._requests.items() if not v or max(v) < cutoff]
+        for k in stale:
+            del self._requests[k]
+
+
+rate_limiter = RateLimiter(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW)
+
+
 # ----------------------------------------------------------------- schemas
 class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=160)
@@ -411,6 +489,7 @@ class TaskIn(BaseModel):
     priority: Literal["high", "normal", "low"] = "normal"
     assignee_id: Optional[str] = None
     due_date: Optional[str] = Field(default=None, max_length=10)
+    trade: Optional[str] = Field(default=None, max_length=80)
     lat: Optional[float] = None
     lng: Optional[float] = None
     photo_id: Optional[str] = None
@@ -423,6 +502,15 @@ class TaskIn(BaseModel):
         datetime.strptime(v, "%Y-%m-%d")     # raises -> 422
         return v
 
+    @field_validator("trade")
+    @classmethod
+    def _check_trade(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
 
 class TaskPatch(BaseModel):
     title: Optional[str] = None
@@ -431,14 +519,35 @@ class TaskPatch(BaseModel):
     status: Optional[Literal["open", "doing", "done"]] = None
     assignee_id: Optional[str] = None
     due_date: Optional[str] = None
+    trade: Optional[str] = Field(default=None, max_length=80)
+
+    @field_validator("trade")
+    @classmethod
+    def _check_trade(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
 
 
 class CommentIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class PropertyInfoIn(BaseModel):
+    kind: Literal["systemInfo", "utilities", "documents"]
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(default="", max_length=20000)
+
+
+class PropertyInfoPatch(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    content: Optional[str] = Field(default=None, max_length=20000)
+
+
 # -------------------------------------------------------------------- app
-app = FastAPI(title="Verde API", version="2.0.0", docs_url="/api/docs")
+app = FastAPI(title="Verde API", version="2.1.0", docs_url="/api/docs")
 
 app.add_middleware(
     CORSMiddleware,
@@ -448,6 +557,73 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/media", StaticFiles(directory=MEDIA_ROOT), name="media")
+
+
+# ------------------------------------------------------- broadcast helpers
+async def _broadcast_task_event(
+    event_type: str,
+    task: Task,
+    db: Session,
+    exclude_user_id: Optional[str] = None,
+) -> None:
+    """Broadcast a task event to all connected clients who can see the property."""
+    from .websockets import ConnectionManager
+    # Get the connection manager from app state
+    manager: ConnectionManager | None = getattr(app.state, "ws_manager", None)
+    if not manager:
+        return
+    message = {
+        "type": event_type,
+        "task": _task_dict(db, task),
+    }
+    await manager.broadcast_to_property(task.property_id, message, db, exclude_user_id)
+
+
+async def _notify_user(
+    user_id: str,
+    notif_type: str,
+    message: str,
+    task_id: Optional[str] = None,
+    property_id: Optional[str] = None,
+) -> None:
+    """Send a real-time notification to a specific user."""
+    from .websockets import ConnectionManager
+    manager: ConnectionManager | None = getattr(app.state, "ws_manager", None)
+    if not manager:
+        return
+    await manager.send_to_user(user_id, {
+        "type": "notification",
+        "notification": {
+            "type": notif_type,
+            "message": message,
+            "taskId": task_id,
+            "propertyId": property_id,
+            "at": _now().isoformat(),
+        },
+    })
+
+
+def _task_dict(db: Session, t: Task) -> dict:
+    """Serialize a task to a dict (shared by REST and WebSocket)."""
+    comments = db.execute(
+        select(Comment).where(Comment.task_id == t.id).order_by(Comment.created_at)
+    ).scalars().all()
+    return {
+        "id": t.id, "propertyId": t.property_id, "createdBy": t.created_by,
+        "assigneeId": t.assignee_id, "title": t.title, "description": t.description,
+        "priority": t.priority, "status": t.status, "trade": t.trade,
+        "lat": t.lat, "lng": t.lng,
+        "dueDate": t.due_date, "photoId": t.photo_id,
+        "completionPhotoId": t.completion_photo_id,
+        "createdAt": t.created_at.isoformat() if t.created_at else None,
+        "completedAt": t.completed_at.isoformat() if t.completed_at else None,
+        "completedBy": t.completed_by,
+        "comments": [
+            {"id": c.id, "userId": c.user_id, "text": c.text,
+             "at": c.created_at.isoformat() if c.created_at else None}
+            for c in comments
+        ],
+    }
 
 
 def user_out(u: User) -> dict:
@@ -470,24 +646,7 @@ def prop_out(db: Session, p: Property) -> dict:
 
 
 def task_out(db: Session, t: Task) -> dict:
-    comments = db.execute(
-        select(Comment).where(Comment.task_id == t.id).order_by(Comment.created_at)
-    ).scalars().all()
-    return {
-        "id": t.id, "propertyId": t.property_id, "createdBy": t.created_by,
-        "assigneeId": t.assignee_id, "title": t.title, "description": t.description,
-        "priority": t.priority, "status": t.status, "lat": t.lat, "lng": t.lng,
-        "dueDate": t.due_date, "photoId": t.photo_id,
-        "completionPhotoId": t.completion_photo_id,
-        "createdAt": t.created_at.isoformat() if t.created_at else None,
-        "completedAt": t.completed_at.isoformat() if t.completed_at else None,
-        "completedBy": t.completed_by,
-        "comments": [
-            {"id": c.id, "userId": c.user_id, "text": c.text,
-             "at": c.created_at.isoformat() if c.created_at else None}
-            for c in comments
-        ],
-    }
+    return _task_dict(db, t)
 
 
 def photo_out(p: Photo) -> dict:
@@ -499,6 +658,77 @@ def photo_out(p: Photo) -> dict:
     }
 
 
+def notification_out(n: Notification) -> dict:
+    return {
+        "id": n.id, "userId": n.user_id, "type": n.type,
+        "message": n.message, "taskId": n.task_id,
+        "propertyId": n.property_id, "read": n.read,
+        "createdAt": n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+def property_info_out(pi: PropertyInfo) -> dict:
+    return {
+        "id": pi.id, "propertyId": pi.property_id, "kind": pi.kind,
+        "title": pi.title, "content": pi.content,
+        "createdAt": pi.created_at.isoformat() if pi.created_at else None,
+        "updatedAt": pi.updated_at.isoformat() if pi.updated_at else None,
+    }
+
+
+# --------------------------------------------------------- error handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail, "status": exc.status_code},
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    from fastapi.responses import JSONResponse
+    import logging
+    logging.getLogger("verde").exception("Unhandled error")
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_error", "status": 500},
+    )
+
+
+# --------------------------------------------------------- rate limit middleware
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # Use user ID if authenticated, otherwise IP
+    client_key = request.client.host if request.client else "unknown"
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("sub"):
+                client_key = payload["sub"]
+        except JWTError:
+            pass
+
+    if not rate_limiter.is_allowed(client_key):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=429,
+            content={"error": "rate_limited", "status": 429},
+        )
+    return await call_next(request)
+
+
+# ------------------------------------------------------------------ startup
+@app.on_event("startup")
+async def startup_event():
+    from .websockets import ConnectionManager
+    app.state.ws_manager = ConnectionManager(SECRET_KEY, ALGORITHM)
+
+
+# ---------------------------------------------------------------- endpoints
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True, "time": _now().isoformat()}
@@ -581,7 +811,6 @@ def reset_password(body: ResetIn, db: DB) -> dict:
     user.pw_hash = hash_password(body.password)
     user.recovery_hash = _hash_code(code)
     # a password reset invalidates every existing session
-    db.execute(select(RefreshToken).where(RefreshToken.user_id == user.id))
     for row in db.execute(select(RefreshToken).where(RefreshToken.user_id == user.id)).scalars():
         row.revoked = True
     db.commit()
@@ -753,6 +982,83 @@ def delete_property(property_id: str, me: ME, db: DB) -> None:
     db.commit()
 
 
+# ------------------------------------------------- property info sub-resource
+@app.get("/api/properties/{property_id}/info")
+def list_property_info(
+    property_id: str,
+    me: ME,
+    db: DB,
+    kind: Optional[Literal["systemInfo", "utilities", "documents"]] = None,
+) -> list[dict]:
+    assert_can_read_property(db, me, property_id)
+    stmt = select(PropertyInfo).where(PropertyInfo.property_id == property_id)
+    if kind:
+        stmt = stmt.where(PropertyInfo.kind == kind)
+    rows = db.execute(stmt.order_by(PropertyInfo.created_at)).scalars().all()
+    return [property_info_out(pi) for pi in rows]
+
+
+@app.post("/api/properties/{property_id}/info", status_code=201)
+def create_property_info(
+    property_id: str,
+    body: PropertyInfoIn,
+    me: ME,
+    db: DB,
+) -> dict:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    pi = PropertyInfo(
+        property_id=property_id,
+        kind=body.kind,
+        title=body.title.strip(),
+        content=body.content,
+    )
+    db.add(pi)
+    db.commit()
+    return property_info_out(pi)
+
+
+@app.patch("/api/properties/{property_id}/info/{info_id}")
+def update_property_info(
+    property_id: str,
+    info_id: str,
+    body: PropertyInfoPatch,
+    me: ME,
+    db: DB,
+) -> dict:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    pi = db.get(PropertyInfo, info_id)
+    if not pi or pi.property_id != property_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    if body.title is not None:
+        pi.title = body.title.strip()
+    if body.content is not None:
+        pi.content = body.content
+    pi.updated_at = _now()
+    db.commit()
+    return property_info_out(pi)
+
+
+@app.delete("/api/properties/{property_id}/info/{info_id}", status_code=204)
+def delete_property_info(
+    property_id: str,
+    info_id: str,
+    me: ME,
+    db: DB,
+) -> None:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    pi = db.get(PropertyInfo, info_id)
+    if not pi or pi.property_id != property_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    db.delete(pi)
+    db.commit()
+
+
 # ------------------------------------------------------------------ tasks
 @app.get("/api/tasks")
 def list_tasks(
@@ -760,6 +1066,7 @@ def list_tasks(
     property_id: Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
     priority: Optional[str] = None,
+    trade: Optional[str] = None,
     assignee_id: Optional[str] = None,
     q: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
@@ -778,6 +1085,8 @@ def list_tasks(
         stmt = stmt.where(Task.status == status_filter)
     if priority:
         stmt = stmt.where(Task.priority == priority)
+    if trade:
+        stmt = stmt.where(func.lower(Task.trade) == trade.lower())
     if assignee_id:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     if q:
@@ -794,27 +1103,52 @@ def list_tasks(
 
 
 @app.post("/api/tasks", status_code=201)
-def create_task(body: TaskIn, me: ME, db: DB) -> dict:
+async def create_task(body: TaskIn, me: ME, db: DB) -> dict:
     assert_can_read_property(db, me, body.property_id)
     t = Task(
         property_id=body.property_id, created_by=me.id,
         title=body.title.strip(), description=body.description,
         priority=body.priority, assignee_id=body.assignee_id,
-        due_date=body.due_date, lat=body.lat, lng=body.lng,
+        due_date=body.due_date, trade=body.trade,
+        lat=body.lat, lng=body.lng,
         photo_id=body.photo_id,
     )
     db.add(t)
     db.commit()
+    db.refresh(t)
+
+    # Notify assignee
+    if body.assignee_id and body.assignee_id != me.id:
+        prop = db.get(Property, body.property_id)
+        notif = Notification(
+            user_id=body.assignee_id,
+            type="task_assigned",
+            message=f"You were assigned: {t.title}",
+            task_id=t.id,
+            property_id=t.property_id,
+        )
+        db.add(notif)
+        db.commit()
+        await _notify_user(
+            body.assignee_id, "task_assigned",
+            f"You were assigned: {t.title}",
+            task_id=t.id, property_id=t.property_id,
+        )
+
+    # Broadcast to all who can see this property
+    await _broadcast_task_event("task_created", t, db)
     return task_out(db, t)
 
 
 @app.patch("/api/tasks/{task_id}")
-def update_task(task_id: str, body: TaskPatch, me: ME, db: DB) -> dict:
+async def update_task(task_id: str, body: TaskPatch, me: ME, db: DB) -> dict:
     t = db.get(Task, task_id)
     if not t:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
     assert_can_read_property(db, me, t.property_id)
-    for field_name in ("title", "description", "priority", "assignee_id", "due_date"):
+
+    old_assignee = t.assignee_id
+    for field_name in ("title", "description", "priority", "assignee_id", "due_date", "trade"):
         v = getattr(body, field_name)
         if v is not None:
             setattr(t, field_name, v)
@@ -827,23 +1161,61 @@ def update_task(task_id: str, body: TaskPatch, me: ME, db: DB) -> dict:
             t.completed_at = None
             t.completed_by = None
     db.commit()
+    db.refresh(t)
+
+    # Notify new assignee if changed
+    if body.assignee_id and body.assignee_id != old_assignee and body.assignee_id != me.id:
+        notif = Notification(
+            user_id=body.assignee_id,
+            type="task_assigned",
+            message=f"You were assigned: {t.title}",
+            task_id=t.id,
+            property_id=t.property_id,
+        )
+        db.add(notif)
+        db.commit()
+        await _notify_user(
+            body.assignee_id, "task_assigned",
+            f"You were assigned: {t.title}",
+            task_id=t.id, property_id=t.property_id,
+        )
+
+    # Notify assignee of status change to done
+    if body.status == "done" and t.assignee_id and t.assignee_id != me.id:
+        await _notify_user(
+            t.assignee_id, "task_completed",
+            f"Task completed: {t.title}",
+            task_id=t.id, property_id=t.property_id,
+        )
+
+    await _broadcast_task_event("task_updated", t, db)
     return task_out(db, t)
 
 
 @app.delete("/api/tasks/{task_id}", status_code=204)
-def delete_task(task_id: str, me: ME, db: DB) -> None:
+async def delete_task(task_id: str, me: ME, db: DB) -> None:
     t = db.get(Task, task_id)
     if not t:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
     prop = db.get(Property, t.property_id)
     if not prop or prop.owner_id != me.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    property_id = t.property_id
     db.delete(t)
     db.commit()
 
+    # Broadcast deletion
+    from .websockets import ConnectionManager
+    manager: ConnectionManager | None = getattr(app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast_to_property(property_id, {
+            "type": "task_deleted",
+            "taskId": task_id,
+        }, db)
+
 
 @app.post("/api/tasks/{task_id}/comments", status_code=201)
-def add_comment(task_id: str, body: CommentIn, me: ME, db: DB) -> dict:
+async def add_comment(task_id: str, body: CommentIn, me: ME, db: DB) -> dict:
     t = db.get(Task, task_id)
     if not t:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
@@ -851,6 +1223,16 @@ def add_comment(task_id: str, body: CommentIn, me: ME, db: DB) -> dict:
     c = Comment(task_id=t.id, user_id=me.id, text=body.text.strip())
     db.add(c)
     db.commit()
+
+    # Notify assignee of new comment
+    if t.assignee_id and t.assignee_id != me.id:
+        await _notify_user(
+            t.assignee_id, "task_comment",
+            f"New comment on: {t.title}",
+            task_id=t.id, property_id=t.property_id,
+        )
+
+    await _broadcast_task_event("task_comment_added", t, db)
     return {"id": c.id, "userId": c.user_id, "text": c.text,
             "at": c.created_at.isoformat()}
 
@@ -970,6 +1352,64 @@ def list_workers(me: ME, db: DB) -> list[dict]:
     return out
 
 
+# ------------------------------------------------------------ notifications
+@app.get("/api/notifications")
+def list_notifications(
+    me: ME,
+    db: DB,
+    unread_only: bool = False,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict:
+    stmt = select(Notification).where(Notification.user_id == me.id)
+    if unread_only:
+        stmt = stmt.where(Notification.read == False)
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    rows = db.execute(
+        stmt.order_by(Notification.created_at.desc()).limit(limit).offset(offset)
+    ).scalars().all()
+    return {
+        "items": [notification_out(n) for n in rows],
+        "total": total, "limit": limit, "offset": offset,
+        "unread": db.execute(
+            select(func.count()).select_from(Notification).where(
+                Notification.user_id == me.id, Notification.read == False)
+        ).scalar_one(),
+    }
+
+
+@app.post("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, me: ME, db: DB) -> dict:
+    n = db.get(Notification, notification_id)
+    if not n or n.user_id != me.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    n.read = True
+    db.commit()
+    return notification_out(n)
+
+
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_read(me: ME, db: DB) -> dict:
+    rows = db.execute(
+        select(Notification).where(
+            Notification.user_id == me.id, Notification.read == False)
+    ).scalars().all()
+    for n in rows:
+        n.read = True
+    db.commit()
+    return {"updated": len(rows)}
+
+
+@app.get("/api/notifications/unread-count")
+def unread_notification_count(me: ME, db: DB) -> dict:
+    count = db.execute(
+        select(func.count()).select_from(Notification).where(
+            Notification.user_id == me.id, Notification.read == False)
+    ).scalar_one()
+    return {"unread": count}
+
+
+# ------------------------------------------------------------------ stats
 @app.get("/api/stats")
 def stats(me: ME, db: DB) -> dict:
     ids = visible_property_ids(db, me)
@@ -1009,3 +1449,79 @@ def media(path: str) -> FileResponse:
     if not os.path.isfile(full):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
     return FileResponse(full)
+
+
+# --------------------------------------------------------------- websocket
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time updates.
+
+    Connect with: ws://host/ws?token=<JWT_ACCESS_TOKEN>
+
+    Message types received from server:
+    - task_created: A new task was created on a visible property
+    - task_updated: A task was updated
+    - task_deleted: A task was deleted
+    - task_comment_added: A comment was added to a task
+    - notification: A notification for the connected user
+
+    Client can send:
+    - {"type": "ping"} — keepalive
+    - {"type": "subscribe", "propertyId": "..."} — subscribe to property updates
+    """
+    from .websockets import ConnectionManager
+
+    manager: ConnectionManager | None = getattr(app.state, "ws_manager", None)
+    if not manager:
+        await websocket.close(code=1011)
+        return
+
+    # Get token from query params
+    token = websocket.query_params.get("token", "")
+
+    # Create a temporary DB session for auth
+    db = SessionLocal()
+    try:
+        user_id = await manager.connect(websocket, token, db)
+        if not user_id:
+            return
+
+        # Send connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "userId": user_id,
+            "at": _now().isoformat(),
+        })
+
+        # Main message loop
+        while True:
+            try:
+                data = await websocket.receive_json()
+                msg_type = data.get("type", "")
+
+                if msg_type == "ping":
+                    await websocket.send_json({"type": "pong"})
+
+                elif msg_type == "subscribe":
+                    # Client can subscribe to specific property updates
+                    # (already handled by broadcast_to_property, but client
+                    # can use this to confirm subscription)
+                    property_id = data.get("propertyId")
+                    if property_id:
+                        # Verify access
+                        ids = visible_property_ids(db, db.get(User, user_id))
+                        if property_id in ids:
+                            await websocket.send_json({
+                                "type": "subscribed",
+                                "propertyId": property_id,
+                            })
+
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                # Don't let malformed messages kill the connection
+                continue
+    finally:
+        db.close()
+        manager.disconnect(websocket)

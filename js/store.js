@@ -54,8 +54,174 @@ const GROUP_COLORS = ["#34d399", "#6ee7ff", "#f5c451", "#ff6b8a", "#a78bfa", "#f
 
 const blank = () => ({
   schema: SCHEMA,
-  users: [], groups: [], properties: [], tasks: [], photos: [], activity: [],
+  users: [], groups: [], properties: [], tasks: [], photos: [], activity: [], scans: [],
 });
+
+const blankProperty = () => ({
+  systemInfo: {},
+  utilities: [],
+  documents: [],
+});
+
+/* --------------------------------------------------------- API client */
+const API = {
+  baseUrl: null,
+  ws: null,
+  wsToken: null,
+  wsConnected: false,
+  _wsListeners: [],
+  _reconnectTimer: null,
+
+  get enabled() {
+    return typeof window !== "undefined" && !!window.VERDE_API;
+  },
+
+  init() {
+    if (!this.enabled) return;
+    this.baseUrl = window.VERDE_API.replace(/\/$/, "");
+  },
+
+  /* ---- REST helpers ---- */
+  async request(method, path, body) {
+    if (!this.enabled) throw new Error("api_disabled");
+    const url = `${this.baseUrl}/api${path}`;
+    const opts = { method, headers: {} };
+    const token = this._getToken();
+    if (token) opts.headers["Authorization"] = `Bearer ${token}`;
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(url, opts);
+    if (res.status === 204) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || `http_${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+
+  get(path) { return this.request("GET", path); },
+  post(path, body) { return this.request("POST", path, body); },
+  patch(path, body) { return this.request("PATCH", path, body); },
+  put(path, body) { return this.request("PUT", path, body); },
+  del(path) { return this.request("DELETE", path); },
+
+  _getToken() {
+    try {
+      const raw = localStorage.getItem("verde.tokens");
+      if (raw) { const t = JSON.parse(raw); return t.access || null; }
+    } catch { /* ignore */ }
+    return null;
+  },
+
+  _setTokens(access, refresh) {
+    try {
+      if (access) localStorage.setItem("verde.tokens", JSON.stringify({ access, refresh }));
+      else localStorage.removeItem("verde.tokens");
+    } catch { /* ignore */ }
+    // Reconnect WebSocket with new token
+    if (this.wsConnected) {
+      this.disconnectWS();
+      this.connectWS(access);
+    }
+  },
+
+  /* ---- WebSocket ---- */
+  connectWS(token) {
+    if (!this.enabled) return;
+    const wsUrl = this.baseUrl.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
+    try {
+      this.ws = new WebSocket(wsUrl);
+      this.wsToken = token;
+
+      this.ws.onopen = () => {
+        this.wsConnected = true;
+        this._emit("ws_open", {});
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          this._handleWSMessage(msg);
+        } catch { /* ignore malformed */ }
+      };
+
+      this.ws.onclose = () => {
+        this.wsConnected = false;
+        this._emit("ws_close", {});
+        // Auto-reconnect after 5s
+        if (this.enabled && !this._reconnectTimer) {
+          this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            const t = this._getToken();
+            if (t) this.connectWS(t);
+          }, 5000);
+        }
+      };
+
+      this.ws.onerror = () => {
+        // onclose will follow
+      };
+    } catch {
+      // WebSocket not available
+    }
+  },
+
+  disconnectWS() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.wsConnected = false;
+  },
+
+  _handleWSMessage(msg) {
+    switch (msg.type) {
+      case "connected":
+        this._emit("ws_connected", msg);
+        break;
+      case "task_created":
+      case "task_updated":
+      case "task_comment_added":
+        this._emit("task_changed", msg);
+        break;
+      case "task_deleted":
+        this._emit("task_deleted", msg);
+        break;
+      case "notification":
+        this._emit("notification", msg.notification);
+        break;
+      case "pong":
+        break;
+    }
+  },
+
+  /* ---- Event subscription ---- */
+  on(event, handler) {
+    this._wsListeners.push({ event, handler });
+  },
+
+  off(event, handler) {
+    this._wsListeners = this._wsListeners.filter(
+      (l) => !(l.event === event && l.handler === handler)
+    );
+  },
+
+  _emit(event, data) {
+    for (const l of this._wsListeners) {
+      if (l.event === event) {
+        try { l.handler(data); } catch { /* ignore */ }
+      }
+    }
+  },
+};
 
 /* --------------------------------------------------------------- store */
 export const Store = {
@@ -80,7 +246,7 @@ export const Store = {
         this.db = blank();
       }
     }
-    for (const k of ["users", "groups", "properties", "tasks", "photos", "activity"]) {
+    for (const k of ["users", "groups", "properties", "tasks", "photos", "activity", "scans"]) {
       if (!Array.isArray(this.db[k])) this.db[k] = [];
     }
     this.db.schema = SCHEMA;
@@ -131,6 +297,7 @@ export const Store = {
       properties: byId(this.db.properties),
       tasks: byId(this.db.tasks),
       photos: byId(this.db.photos),
+      scans: byId(this.db.scans),
       propsByOwner: groupBy(this.db.properties, "ownerId"),
       tasksByProperty: groupBy(this.db.tasks, "propertyId"),
       photosByProperty: groupBy(this.db.photos, "propertyId"),
@@ -197,7 +364,7 @@ export const Store = {
   },
 
   /* ------------------------------------------------------------ accounts */
-  async signup({ name, email, password, role, language }) {
+  async signup({ name, email, password, role, language, trade }) {
     email = (email || "").trim().toLowerCase();
     name = (name || "").trim();
     if (!name || !email || !password) throw new Error("missing_fields");
@@ -213,6 +380,7 @@ export const Store = {
       recoveryHash: await sha256(s + recovery),
       role: role === "worker" ? "worker" : "owner",
       language: language || "en",
+      trade: trade || null,
       active: true,
       createdAt: new Date().toISOString(),
       lastSeen: null,
@@ -294,7 +462,7 @@ export const Store = {
   updateProfile(userId, patch) {
     const u = this.idx.users.get(userId);
     if (!u) return null;
-    for (const k of ["name", "language"]) {
+    for (const k of ["name", "language", "trade"]) {
       if (patch[k] != null) u[k] = patch[k];
     }
     this.log(userId, "account.updated");
@@ -418,6 +586,7 @@ export const Store = {
       address: address || "", notes: notes || "",
       lat: lat ?? null, lng: lng ?? null,
       workers: [], groups: [],
+      systemInfo: {}, utilities: [], documents: [],
       createdAt: new Date().toISOString(),
     };
     this.db.properties.push(p);
@@ -500,8 +669,95 @@ export const Store = {
     return p;
   },
 
+  /* --------------------------------------------- property info: system */
+  updateSystemInfo(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.systemInfo = Object.assign({}, p.systemInfo, data);
+    this.log(p.ownerId, "property.system_updated", { property: p.name });
+    this.save();
+    return p;
+  },
+
+  /* --------------------------------------------- property info: utilities */
+  addUtility(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.utilities = p.utilities || [];
+    const u = {
+      id: uid("u"),
+      type: data.type || "other",
+      label: data.label || "",
+      notes: data.notes || "",
+      photoId: data.photoId || null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
+    };
+    p.utilities.push(u);
+    this.log(p.ownerId, "property.utility_added", { property: p.name, type: u.type });
+    this.save();
+    return u;
+  },
+
+  updateUtility(propId, utilityId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    const u = (p.utilities || []).find((x) => x.id === utilityId);
+    if (!u) return null;
+    Object.assign(u, data);
+    this.log(p.ownerId, "property.utility_updated", { property: p.name });
+    this.save();
+    return u;
+  },
+
+  deleteUtility(propId, utilityId) {
+    const p = this.property(propId);
+    if (!p) return;
+    p.utilities = (p.utilities || []).filter((x) => x.id !== utilityId);
+    this.log(p.ownerId, "property.utility_deleted", { property: p.name });
+    this.save();
+  },
+
+  /* --------------------------------------------- property info: documents */
+  addDocument(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.documents = p.documents || [];
+    const d = {
+      id: uid("d"),
+      title: data.title || "",
+      description: data.description || "",
+      category: data.category || "other",
+      date: data.date || null,
+      notes: data.notes || "",
+    };
+    p.documents.push(d);
+    this.log(p.ownerId, "property.document_added", { property: p.name, title: d.title });
+    this.save();
+    return d;
+  },
+
+  updateDocument(propId, docId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    const d = (p.documents || []).find((x) => x.id === docId);
+    if (!d) return null;
+    Object.assign(d, data);
+    this.log(p.ownerId, "property.document_updated", { property: p.name });
+    this.save();
+    return d;
+  },
+
+  deleteDocument(propId, docId) {
+    const p = this.property(propId);
+    if (!p) return;
+    p.documents = (p.documents || []).filter((x) => x.id !== docId);
+    this.log(p.ownerId, "property.document_deleted", { property: p.name });
+    this.save();
+  },
+
   /* --------------------------------------------------------------- tasks */
-  addTask({ propertyId, createdBy, title, description, lat, lng, priority, photoId, assigneeId, dueDate }) {
+  addTask({ propertyId, createdBy, title, description, lat, lng, priority, photoId, assigneeId, dueDate, trade }) {
     const t = {
       id: uid("t"), propertyId, createdBy,
       title: (title || "Task").trim(),
@@ -512,6 +768,7 @@ export const Store = {
       assigneeId: assigneeId || null,
       dueDate: dueDate || null,
       photoId: photoId || null,
+      trade: trade || "general",
       completionPhotoId: null,
       createdAt: new Date().toISOString(),
       completedAt: null, completedBy: null,
@@ -632,6 +889,36 @@ export const Store = {
     return { bytes, mb: bytes / 1048576, limitMb: 5 };
   },
 
+  /* --------------------------------------------------------------- scans */
+  addScan({ userId, propertyId, name, points }) {
+    const s = {
+      id: uid("s"), userId, propertyId,
+      name: (name || "Scan").trim(),
+      points: points || [],
+      createdAt: new Date().toISOString(),
+    };
+    this.db.scans.push(s);
+    this.log(userId, "scan.created", { name: s.name, points: s.points.length });
+    this.reindex();
+    this.save();
+    return s;
+  },
+
+  scan(id) { return this.idx.scans.get(id) || null; },
+
+  scansFor(propertyId) {
+    return this.db.scans.filter((s) => s.propertyId === propertyId);
+  },
+
+  deleteScan(id, userId) {
+    const s = this.scan(id);
+    if (!s) return;
+    this.db.scans = this.db.scans.filter((x) => x.id !== id);
+    this.log(userId || s.userId, "scan.deleted", { name: s.name });
+    this.reindex();
+    this.save();
+  },
+
   /* --------------------------------------------------------------- stats */
   statsFor(user) {
     const tasks = this.tasksForUser(user);
@@ -705,27 +992,27 @@ export const Store = {
     this.addTask({
       propertyId: p1.id, createdBy: owner.id, title: "Replace the front fence",
       description: "The left gate post is rotting. I want a darker wood this time, not the same colour.",
-      priority: "high", lat: 34.5975, lng: -120.1352, assigneeId: kenji.id, dueDate: iso(3),
+      priority: "high", lat: 34.5975, lng: -120.1352, assigneeId: kenji.id, dueDate: iso(3), trade: "general",
     });
     this.addTask({
       propertyId: p1.id, createdBy: owner.id, title: "Trim the hedge lower",
       description: "Cut it about 30cm lower than last time so it doesn't block the window.",
-      priority: "normal", lat: 34.5944, lng: -120.1395, assigneeId: diego.id, dueDate: iso(7),
+      priority: "normal", lat: 34.5944, lng: -120.1395, assigneeId: diego.id, dueDate: iso(7), trade: "landscaping",
     });
     this.addTask({
       propertyId: p2.id, createdBy: owner.id, title: "Fix the drip line by the olive trees",
       description: "The far line is blocked — water pools near the trunk.",
-      priority: "high", lat: 34.6201, lng: -120.1193, assigneeId: diego.id, dueDate: iso(-1),
+      priority: "high", lat: 34.6201, lng: -120.1193, assigneeId: diego.id, dueDate: iso(-1), trade: "landscaping",
     });
     this.addTask({
       propertyId: p2.id, createdBy: owner.id, title: "Re-seed the back lawn",
       description: "Patchy near the path.", priority: "low",
-      lat: 34.6162, lng: -120.1238, dueDate: iso(21),
+      lat: 34.6162, lng: -120.1238, dueDate: iso(21), trade: "landscaping",
     });
     this.addTask({
       propertyId: p3.id, createdBy: owner.id, title: "Lay gravel on the driveway",
       description: "Use the same grey as the courtyard, not the warm tan.",
-      priority: "normal", lat: 34.6691, lng: -120.1163, assigneeId: kenji.id, dueDate: iso(10),
+      priority: "normal", lat: 34.6691, lng: -120.1163, assigneeId: kenji.id, dueDate: iso(10), trade: "general",
     });
     const doneTask = this.db.tasks[3];
     this.setTaskStatus(doneTask.id, "done", diego.id);
@@ -735,6 +1022,54 @@ export const Store = {
     this.commit();
     return this.publicUser(owner);
   },
+
+  /* -------------------------------------------- WebSocket event handling */
+  _handleTaskChanged(msg) {
+    // Update local cache with the task from the WebSocket message
+    if (msg.task) {
+      const existing = this.idx.tasks.get(msg.task.id);
+      if (existing) {
+        Object.assign(existing, this._apiTaskToLocal(msg.task));
+      } else {
+        this.db.tasks.push(this._apiTaskToLocal(msg.task));
+      }
+      this.reindex();
+      this.save();
+    }
+  },
+
+  _handleTaskDeleted(msg) {
+    if (msg.taskId) {
+      this.db.tasks = this.db.tasks.filter((t) => t.id !== msg.taskId);
+      this.reindex();
+      this.save();
+    }
+  },
+
+  _handleNotification(notif) {
+    // Show a toast or in-app notification
+    // The UI can subscribe to this via API.on("notification", handler)
+    console.log("verde: notification", notif);
+  },
+
+  initWebSocket() {
+    if (!API.enabled) return;
+    API.on("task_changed", (msg) => this._handleTaskChanged(msg));
+    API.on("task_deleted", (msg) => this._handleTaskDeleted(msg));
+    API.on("notification", (n) => this._handleNotification(n));
+  },
+
+  _apiTaskToLocal(t) {
+    return {
+      id: t.id, propertyId: t.propertyId, createdBy: t.createdBy,
+      assigneeId: t.assigneeId, title: t.title, description: t.description,
+      priority: t.priority, status: t.status, trade: t.trade,
+      lat: t.lat, lng: t.lng, dueDate: t.dueDate,
+      photoId: t.photoId, completionPhotoId: t.completionPhotoId,
+      createdAt: t.createdAt, completedAt: t.completedAt, completedBy: t.completedBy,
+      comments: t.comments || [],
+    };
+  },
 };
 
-export { GROUP_COLORS };
+export { GROUP_COLORS, API };

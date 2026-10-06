@@ -2,16 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Verde" />
+<meta name="mobile-web-app-capable" content="yes" />
 <title>Verde — Landscaping, organised</title>
 <meta name="description" content="Verde connects land owners and gardeners: photo change requests, a live map of every job, crews, and automatic translation." />
 <meta name="theme-color" content="#0a1310" />
 <meta name="color-scheme" content="dark" />
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/icon.svg" />
+<link rel="manifest" href="manifest.json" />
 <link rel="preconnect" href="https://unpkg.com" />
 <link rel="preconnect" href="https://tile.openstreetmap.org" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="css/style.css?v=8" />
+<link rel="stylesheet" href="css/style.css?v=9" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -77,6 +91,17 @@
         <label class="field">
           <span data-i18n="language">Primary language</span>
           <select name="language" id="signupLang" required></select>
+        </label>
+        <label class="field" id="signupTradeField" hidden>
+          <span data-i18n="trade">Trade specialization</span>
+          <select name="trade" id="signupTrade">
+            <option value="" data-i18n="trade_general">General</option>
+            <option value="landscaping" data-i18n="trade_landscaping">Landscaping</option>
+            <option value="construction" data-i18n="trade_construction">Construction</option>
+            <option value="irrigation" data-i18n="trade_irrigation">Irrigation</option>
+            <option value="hardscaping" data-i18n="trade_hardscaping">Hardscaping</option>
+            <option value="tree" data-i18n="trade_tree">Tree work</option>
+          </select>
         </label>
         <button class="btn wide" type="submit" data-i18n="signup">Create account</button>
         <p class="swap">
@@ -185,10 +210,12 @@
     <div class="view" data-view="photos" id="photosBody" hidden></div>
     <div class="view" data-view="activity" id="activityBody" hidden></div>
     <div class="view" data-view="settings" id="settingsBody" hidden></div>
+    <div class="view" data-view="scan" id="scanBody" hidden></div>
   </main>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-<script type="module" src="js/app.js?v=13"></script>
+<script type="module" src="js/app.js?v=14"></script>
+<script type="module" src="js/mobile.js?v=1"></script>
 </body>
 </html>
