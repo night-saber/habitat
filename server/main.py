@@ -1,5 +1,5 @@
 """
-Verde — API server.
+Habitat — API server.
 
 The static client in this repo runs on localStorage and needs no server. This
 is the backend it should be pointed at when more than one person needs to see
@@ -30,7 +30,7 @@ Run
                 python-multipart pydantic-settings aiofiles
     uvicorn main:app --reload
 
-Then set `window.VERDE_API = "http://localhost:8000"` in the client.
+Then set `window.HABITAT_API = "http://localhost:8000"` in the client.
 """
 
 from __future__ import annotations
@@ -62,18 +62,18 @@ from sqlalchemy.orm import (
 )
 
 # ---------------------------------------------------------------- settings
-SECRET_KEY = os.environ.get("VERDE_SECRET", secrets.token_urlsafe(48))
+SECRET_KEY = os.environ.get("HABITAT_SECRET", secrets.token_urlsafe(48))
 ALGORITHM = "HS256"
 ACCESS_MINUTES = 30
 REFRESH_DAYS = 30
-MEDIA_ROOT = os.environ.get("VERDE_MEDIA", "./media")
+MEDIA_ROOT = os.environ.get("HABITAT_MEDIA", "./media")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024          # 8 MB per photo
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-DATABASE_URL = os.environ.get("VERDE_DB", "sqlite:///./verde.db")
+DATABASE_URL = os.environ.get("HABITAT_DB", "sqlite:///./habitat.db")
 
 # Rate limiting
-RATE_LIMIT_REQUESTS = int(os.environ.get("VERDE_RATE_LIMIT", "100"))
-RATE_LIMIT_WINDOW = int(os.environ.get("VERDE_RATE_WINDOW", "60"))  # seconds
+RATE_LIMIT_REQUESTS = int(os.environ.get("HABITAT_RATE_LIMIT", "100"))
+RATE_LIMIT_WINDOW = int(os.environ.get("HABITAT_RATE_WINDOW", "60"))  # seconds
 
 os.makedirs(MEDIA_ROOT, exist_ok=True)
 
@@ -107,6 +107,10 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Worker service area (only for workers)
+    service_lat: Mapped[Optional[float]] = mapped_column(nullable=True)
+    service_lng: Mapped[Optional[float]] = mapped_column(nullable=True)
+    service_radius_km: Mapped[Optional[float]] = mapped_column(nullable=True)
 
 
 class RefreshToken(Base):
@@ -267,6 +271,68 @@ class PropertyInfo(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 
+class Room(Base):
+    """Room-by-room detail record for a property."""
+    __tablename__ = "rooms"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    type: Mapped[str] = mapped_column(String(40), default="other")
+    floor_level: Mapped[str] = mapped_column(String(40), default="")
+    dimensions: Mapped[str] = mapped_column(String(80), default="")
+    flooring: Mapped[str] = mapped_column(String(120), default="")
+    flooring_color: Mapped[str] = mapped_column(String(120), default="")
+    wall_color: Mapped[str] = mapped_column(String(120), default="")
+    ceiling_color: Mapped[str] = mapped_column(String(120), default="")
+    trim_color: Mapped[str] = mapped_column(String(120), default="")
+    window_type: Mapped[str] = mapped_column(String(80), default="")
+    window_count: Mapped[str] = mapped_column(String(20), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    lat: Mapped[Optional[float]] = mapped_column(nullable=True)
+    lng: Mapped[Optional[float]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Appliance(Base):
+    """Appliance inventory record for a property."""
+    __tablename__ = "appliances"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    type: Mapped[str] = mapped_column(String(40), default="other")
+    brand: Mapped[str] = mapped_column(String(120), default="")
+    model: Mapped[str] = mapped_column(String(120), default="")
+    serial_number: Mapped[str] = mapped_column(String(120), default="")
+    year_installed: Mapped[str] = mapped_column(String(10), default="")
+    warranty_expiry: Mapped[str] = mapped_column(String(20), default="")
+    room: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Material(Base):
+    """Material/finish record for a property."""
+    __tablename__ = "materials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    type: Mapped[str] = mapped_column(String(40), default="other")
+    color: Mapped[str] = mapped_column(String(120), default="")
+    finish: Mapped[str] = mapped_column(String(80), default="")
+    brand: Mapped[str] = mapped_column(String(120), default="")
+    product_code: Mapped[str] = mapped_column(String(120), default="")
+    room: Mapped[str] = mapped_column(String(80), default="")
+    date_installed: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 Base.metadata.create_all(engine)
 
 
@@ -297,7 +363,7 @@ def verify_password(pw: str, stored: str) -> bool:
 def make_recovery_code() -> str:
     A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     part = lambda: "".join(secrets.choice(A) for _ in range(4))  # noqa: E731
-    return f"VERDE-{part()}-{part()}-{part()}"
+    return f"HABITAT-{part()}-{part()}-{part()}"
 
 
 def _hash_code(code: str) -> str:
@@ -546,12 +612,106 @@ class PropertyInfoPatch(BaseModel):
     content: Optional[str] = Field(default=None, max_length=20000)
 
 
+class RoomIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(default="other", max_length=40)
+    floor_level: str = Field(default="", max_length=40)
+    dimensions: str = Field(default="", max_length=80)
+    flooring: str = Field(default="", max_length=120)
+    flooring_color: str = Field(default="", max_length=120)
+    wall_color: str = Field(default="", max_length=120)
+    ceiling_color: str = Field(default="", max_length=120)
+    trim_color: str = Field(default="", max_length=120)
+    window_type: str = Field(default="", max_length=80)
+    window_count: str = Field(default="", max_length=20)
+    notes: str = Field(default="", max_length=4000)
+    photo_id: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class RoomPatch(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    type: Optional[str] = Field(default=None, max_length=40)
+    floor_level: Optional[str] = Field(default=None, max_length=40)
+    dimensions: Optional[str] = Field(default=None, max_length=80)
+    flooring: Optional[str] = Field(default=None, max_length=120)
+    flooring_color: Optional[str] = Field(default=None, max_length=120)
+    wall_color: Optional[str] = Field(default=None, max_length=120)
+    ceiling_color: Optional[str] = Field(default=None, max_length=120)
+    trim_color: Optional[str] = Field(default=None, max_length=120)
+    window_type: Optional[str] = Field(default=None, max_length=80)
+    window_count: Optional[str] = Field(default=None, max_length=20)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    photo_id: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class ApplianceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(default="other", max_length=40)
+    brand: str = Field(default="", max_length=120)
+    model: str = Field(default="", max_length=120)
+    serial_number: str = Field(default="", max_length=120)
+    year_installed: str = Field(default="", max_length=10)
+    warranty_expiry: str = Field(default="", max_length=20)
+    room: str = Field(default="", max_length=80)
+    notes: str = Field(default="", max_length=4000)
+    photo_id: Optional[str] = None
+
+
+class AppliancePatch(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    type: Optional[str] = Field(default=None, max_length=40)
+    brand: Optional[str] = Field(default=None, max_length=120)
+    model: Optional[str] = Field(default=None, max_length=120)
+    serial_number: Optional[str] = Field(default=None, max_length=120)
+    year_installed: Optional[str] = Field(default=None, max_length=10)
+    warranty_expiry: Optional[str] = Field(default=None, max_length=20)
+    room: Optional[str] = Field(default=None, max_length=80)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    photo_id: Optional[str] = None
+
+
+class MaterialIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(default="other", max_length=40)
+    color: str = Field(default="", max_length=120)
+    finish: str = Field(default="", max_length=80)
+    brand: str = Field(default="", max_length=120)
+    product_code: str = Field(default="", max_length=120)
+    room: str = Field(default="", max_length=80)
+    date_installed: Optional[str] = Field(default=None, max_length=10)
+    notes: str = Field(default="", max_length=4000)
+    photo_id: Optional[str] = None
+
+
+class MaterialPatch(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    type: Optional[str] = Field(default=None, max_length=40)
+    color: Optional[str] = Field(default=None, max_length=120)
+    finish: Optional[str] = Field(default=None, max_length=80)
+    brand: Optional[str] = Field(default=None, max_length=120)
+    product_code: Optional[str] = Field(default=None, max_length=120)
+    room: Optional[str] = Field(default=None, max_length=80)
+    date_installed: Optional[str] = Field(default=None, max_length=10)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    photo_id: Optional[str] = None
+
+
+class WorkerLocationIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    radius_km: Optional[float] = Field(default=None, ge=1, le=500)
+
+
 # -------------------------------------------------------------------- app
-app = FastAPI(title="Verde API", version="2.1.0", docs_url="/api/docs")
+app = FastAPI(title="Habitat API", version="2.1.0", docs_url="/api/docs")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("VERDE_ORIGINS", "*").split(","),
+    allow_origins=os.environ.get("HABITAT_ORIGINS", "*").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -627,12 +787,17 @@ def _task_dict(db: Session, t: Task) -> dict:
 
 
 def user_out(u: User) -> dict:
-    return {
+    d = {
         "id": u.id, "name": u.name, "email": u.email, "role": u.role,
         "language": u.language, "active": u.active,
         "createdAt": u.created_at.isoformat() if u.created_at else None,
         "lastSeen": u.last_seen.isoformat() if u.last_seen else None,
     }
+    if u.role == "worker":
+        d["serviceLat"] = u.service_lat
+        d["serviceLng"] = u.service_lng
+        d["serviceRadiusKm"] = u.service_radius_km
+    return d
 
 
 def prop_out(db: Session, p: Property) -> dict:
@@ -690,7 +855,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def general_exception_handler(request: Request, exc: Exception):
     from fastapi.responses import JSONResponse
     import logging
-    logging.getLogger("verde").exception("Unhandled error")
+    logging.getLogger("habitat").exception("Unhandled error")
     return JSONResponse(
         status_code=500,
         content={"error": "internal_error", "status": 500},
@@ -1059,6 +1224,183 @@ def delete_property_info(
     db.commit()
 
 
+# ------------------------------------------------------------------- rooms
+def _room_out(r: Room) -> dict:
+    return {
+        "id": r.id, "propertyId": r.property_id, "name": r.name,
+        "type": r.type, "floorLevel": r.floor_level,
+        "dimensions": r.dimensions, "flooring": r.flooring,
+        "flooringColor": r.flooring_color, "wallColor": r.wall_color,
+        "ceilingColor": r.ceiling_color, "trimColor": r.trim_color,
+        "windowType": r.window_type, "windowCount": r.window_count,
+        "notes": r.notes, "photoId": r.photo_id,
+        "lat": r.lat, "lng": r.lng,
+        "createdAt": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+@app.get("/api/properties/{property_id}/rooms")
+def list_rooms(property_id: str, me: ME, db: DB) -> list[dict]:
+    assert_can_read_property(db, me, property_id)
+    rows = db.execute(
+        select(Room).where(Room.property_id == property_id).order_by(Room.created_at)
+    ).scalars().all()
+    return [_room_out(r) for r in rows]
+
+
+@app.post("/api/properties/{property_id}/rooms", status_code=201)
+def create_room(property_id: str, body: RoomIn, me: ME, db: DB) -> dict:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    r = Room(property_id=property_id, **body.model_dump())
+    db.add(r)
+    db.commit()
+    return _room_out(r)
+
+
+@app.patch("/api/rooms/{room_id}")
+def update_room(room_id: str, body: RoomPatch, me: ME, db: DB) -> dict:
+    r = db.get(Room, room_id)
+    if not r:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, r.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(r, k, v)
+    db.commit()
+    return _room_out(r)
+
+
+@app.delete("/api/rooms/{room_id}", status_code=204)
+def delete_room(room_id: str, me: ME, db: DB) -> None:
+    r = db.get(Room, room_id)
+    if not r:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, r.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    db.delete(r)
+    db.commit()
+
+
+# -------------------------------------------------------------- appliances
+def _appliance_out(a: Appliance) -> dict:
+    return {
+        "id": a.id, "propertyId": a.property_id, "name": a.name,
+        "type": a.type, "brand": a.brand, "model": a.model,
+        "serialNumber": a.serial_number, "yearInstalled": a.year_installed,
+        "warrantyExpiry": a.warranty_expiry, "room": a.room,
+        "notes": a.notes, "photoId": a.photo_id,
+        "createdAt": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+@app.get("/api/properties/{property_id}/appliances")
+def list_appliances(property_id: str, me: ME, db: DB) -> list[dict]:
+    assert_can_read_property(db, me, property_id)
+    rows = db.execute(
+        select(Appliance).where(Appliance.property_id == property_id).order_by(Appliance.created_at)
+    ).scalars().all()
+    return [_appliance_out(a) for a in rows]
+
+
+@app.post("/api/properties/{property_id}/appliances", status_code=201)
+def create_appliance(property_id: str, body: ApplianceIn, me: ME, db: DB) -> dict:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    a = Appliance(property_id=property_id, **body.model_dump())
+    db.add(a)
+    db.commit()
+    return _appliance_out(a)
+
+
+@app.patch("/api/appliances/{appliance_id}")
+def update_appliance(appliance_id: str, body: AppliancePatch, me: ME, db: DB) -> dict:
+    a = db.get(Appliance, appliance_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, a.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(a, k, v)
+    db.commit()
+    return _appliance_out(a)
+
+
+@app.delete("/api/appliances/{appliance_id}", status_code=204)
+def delete_appliance(appliance_id: str, me: ME, db: DB) -> None:
+    a = db.get(Appliance, appliance_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, a.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    db.delete(a)
+    db.commit()
+
+
+# --------------------------------------------------------------- materials
+def _material_out(m: Material) -> dict:
+    return {
+        "id": m.id, "propertyId": m.property_id, "name": m.name,
+        "type": m.type, "color": m.color, "finish": m.finish,
+        "brand": m.brand, "productCode": m.product_code,
+        "room": m.room, "dateInstalled": m.date_installed,
+        "notes": m.notes, "photoId": m.photo_id,
+        "createdAt": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+@app.get("/api/properties/{property_id}/materials")
+def list_materials(property_id: str, me: ME, db: DB) -> list[dict]:
+    assert_can_read_property(db, me, property_id)
+    rows = db.execute(
+        select(Material).where(Material.property_id == property_id).order_by(Material.created_at)
+    ).scalars().all()
+    return [_material_out(m) for m in rows]
+
+
+@app.post("/api/properties/{property_id}/materials", status_code=201)
+def create_material(property_id: str, body: MaterialIn, me: ME, db: DB) -> dict:
+    prop = assert_can_read_property(db, me, property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    m = Material(property_id=property_id, **body.model_dump())
+    db.add(m)
+    db.commit()
+    return _material_out(m)
+
+
+@app.patch("/api/materials/{material_id}")
+def update_material(material_id: str, body: MaterialPatch, me: ME, db: DB) -> dict:
+    m = db.get(Material, material_id)
+    if not m:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, m.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(m, k, v)
+    db.commit()
+    return _material_out(m)
+
+
+@app.delete("/api/materials/{material_id}", status_code=204)
+def delete_material(material_id: str, me: ME, db: DB) -> None:
+    m = db.get(Material, material_id)
+    if not m:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not_found")
+    prop = assert_can_read_property(db, me, m.property_id)
+    if prop.owner_id != me.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    db.delete(m)
+    db.commit()
+
+
 # ------------------------------------------------------------------ tasks
 @app.get("/api/tasks")
 def list_tasks(
@@ -1350,6 +1692,69 @@ def list_workers(me: ME, db: DB) -> list[dict]:
         ).scalars()]
         out.append(d)
     return out
+
+
+@app.put("/api/me/location")
+def set_my_location(body: WorkerLocationIn, me: ME, db: DB) -> dict:
+    """Set the worker's service area location. Only workers can set their own."""
+    if me.role != "worker":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "worker_only")
+    me.service_lat = body.lat
+    me.service_lng = body.lng
+    if body.radius_km is not None:
+        me.service_radius_km = body.radius_km
+    db.commit()
+    return user_out(me)
+
+
+@app.get("/api/me/location")
+def get_my_location(me: ME, db: DB) -> dict:
+    """Get the current user's service location (workers only)."""
+    return {
+        "lat": me.service_lat,
+        "lng": me.service_lng,
+        "radiusKm": me.service_radius_km,
+    }
+
+
+@app.get("/api/workers/nearby")
+def find_workers_nearby(
+    me: ME,
+    db: DB,
+    lat: float = Query(..., ge=-90, le=90),
+    lng: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(25, ge=1, le=200),
+) -> list[dict]:
+    """Find workers near a given location. Only owners can search.
+    Returns workers sorted by distance using Haversine formula."""
+    if me.role != "owner":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_only")
+    import math
+    R = 6371  # Earth radius in km
+    to_rad = lambda d: d * math.pi / 180  # noqa: E731
+    rows = db.execute(
+        select(User).where(
+            User.role == "worker",
+            User.active == True,
+            User.service_lat.isnot(None),
+            User.service_lng.isnot(None),
+        )
+    ).scalars().all()
+    results = []
+    for w in rows:
+        d_lat = to_rad(w.service_lat - lat)
+        d_lng = to_rad(w.service_lng - lng)
+        a = (math.sin(d_lat / 2) ** 2 +
+             math.cos(to_rad(lat)) * math.cos(to_rad(w.service_lat)) *
+             math.sin(d_lng / 2) ** 2)
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        dist = R * c
+        if dist <= radius_km:
+            d = user_out(w)
+            d["distanceKm"] = round(dist * 10) / 10
+            results.append(d)
+    results.sort(key=lambda x: x["distanceKm"])
+    return results
 
 
 # ------------------------------------------------------------ notifications

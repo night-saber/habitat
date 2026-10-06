@@ -1,4 +1,4 @@
-/* Verde — i18n: UI strings + automatic content translation (MyMemory, free, no key). */
+/* Habitat — i18n: UI strings + automatic content translation (MyMemory, free, no key). */
 "use strict";
 
 export const LANGS = [
@@ -19,14 +19,61 @@ export const LANGS = [
   { code: "ko", name: "한국어" },
   { code: "tl", name: "Filipino" },
   { code: "vi", name: "Tiếng Việt" },
+  { code: "sv", name: "Svenska" },
+  { code: "no", name: "Norsk" },
+  { code: "da", name: "Dansk" },
+  { code: "fi", name: "Suomi" },
+  { code: "cs", name: "Čeština" },
+  { code: "hu", name: "Magyar" },
+  { code: "ro", name: "Română" },
+  { code: "el", name: "Ελληνικά" },
+  { code: "th", name: "ไทย" },
+  { code: "id", name: "Bahasa Indonesia" },
+  { code: "uk", name: "Українська" },
+  { code: "he", name: "עברית", rtl: true },
+  { code: "bn", name: "বাংলা" },
+  { code: "ta", name: "தமிழ்" },
+  { code: "te", name: "తెలుగు" },
+  { code: "mr", name: "मराठी" },
+  { code: "gu", name: "ગુજરાતી" },
+  { code: "pa", name: "ਪੰਜਾਬੀ" },
+  { code: "kn", name: "ಕನ್ನಡ" },
+  { code: "ml", name: "മലയാളം" },
+  { code: "si", name: "සිංහල" },
+  { code: "ne", name: "नेपाली" },
+  { code: "km", name: "ខ្មែរ" },
+  { code: "lo", name: "ລາວ" },
+  { code: "my", name: "မြန်မာ" },
+  { code: "mn", name: "Монгол" },
+  { code: "kk", name: "Қазақ" },
+  { code: "uz", name: "Oʻzbek" },
+  { code: "az", name: "Azərbaycan" },
+  { code: "hy", name: "Հայերեն" },
+  { code: "ka", name: "ქართული" },
+  { code: "sq", name: "Shqip" },
+  { code: "bs", name: "Bosanski" },
+  { code: "sr", name: "Српски" },
+  { code: "hr", name: "Hrvatski" },
+  { code: "sl", name: "Slovenščina" },
+  { code: "mk", name: "Македонски" },
+  { code: "be", name: "Беларуская" },
+  { code: "lt", name: "Lietuvių" },
+  { code: "lv", name: "Latviešu" },
+  { code: "et", name: "Eesti" },
+  { code: "is", name: "Íslenska" },
+  { code: "ga", name: "Gaeilge" },
+  { code: "cy", name: "Cymraeg" },
+  { code: "ca", name: "Català" },
+  { code: "eu", name: "Euskara" },
+  { code: "gl", name: "Galego" },
 ];
 
 const STRINGS = {
   en: {
-    app_name: "Verde", tagline: "Landscaping, organised.",
+    app_name: "Habitat", tagline: "Property, organised.",
     login: "Log in", signup: "Create account", logout: "Log out",
     email: "Email", password: "Password", name: "Full name",
-    role: "I am a", owner: "Land owner", worker: "Gardener / worker",
+    role: "I am a", owner: "Property owner", worker: "Trade worker",
     language: "Primary language", continue: "Continue",
     dashboard: "Dashboard", properties: "Properties", tasks: "Tasks", map: "Map",
     photos: "Photos", crews: "Crews", people: "People", activity: "Activity",
@@ -80,7 +127,7 @@ const STRINGS = {
     my_recovery: "My recovery code", show_code: "Show code",
     last_seen: "Last seen", joined: "Joined", never: "Never",
     enable: "Enable", disable: "Disable", disabled: "Disabled",
-    role_owner: "Land owner", role_worker: "Gardener / worker",
+    role_owner: "Property owner", role_worker: "Trade worker",
     in_crews: "In crews", no_crews_yet: "Not in a crew yet",
     storage: "Storage", storage_used: "used by photos",
     storage_warning: "Photo storage is getting full. Delete some old photos.",
@@ -96,9 +143,9 @@ const STRINGS = {
     worker_mode: "Worker mode", worker_mode_on: "Worker mode ON", worker_mode_off: "Worker mode OFF",
     quick_phrases: "Quick phrases", phrasebook: "Phrasebook", phrase_inserted: "Phrase inserted",
     read_aloud: "Read aloud", stop_reading: "Stop",
-    trade_general: "General", trade_landscaping: "Landscaping",
-    trade_construction: "Construction", trade_irrigation: "Irrigation",
-    trade_hardscaping: "Hardscaping", trade_tree: "Tree work",
+    trade_general: "General", trade_plumbing: "Plumbing",
+        trade_electrical: "Electrical", trade_landscaping: "Landscaping",
+        trade_hvac: "HVAC", trade_roofing: "Roofing",
     category_safety: "Safety", category_materials: "Materials",
     category_tools: "Tools", category_scheduling: "Scheduling",
     property_info: "Property Info", system_details: "System Details",
@@ -127,12 +174,41 @@ const STRINGS = {
     saved_scans: "Saved scans", no_scans_yet: "No saved scans for this property yet.",
     load: "Load", loaded: "Loaded", clear: "Clear", clear_confirm: "Clear all points?",
     export: "Export", reset_view: "Reset view",
+    // Rooms
+    rooms: "Rooms", room_name: "Room name", room_type: "Room type",
+    floor_level: "Floor level", dimensions: "Dimensions",
+    flooring: "Flooring", flooring_color: "Flooring color",
+    wall_color: "Wall color", ceiling_color: "Ceiling color",
+    trim_color: "Trim color", window_type: "Window type",
+    window_count: "Window count", add_room: "Add Room",
+    no_rooms: "No rooms added yet.",
+    // Appliances
+    appliances: "Appliances", appliance_name: "Appliance name",
+    appliance_type: "Appliance type", brand: "Brand", model: "Model",
+    serial_number: "Serial number", year_installed: "Year installed",
+    warranty_expiry: "Warranty expiry", room: "Room",
+    add_appliance: "Add Appliance", no_appliances: "No appliances added yet.",
+    // Materials
+    materials: "Materials", material_name: "Material name",
+    material_type: "Material type", color: "Color", finish: "Finish",
+    product_code: "Product code", date_installed: "Date installed",
+    add_material: "Add Material", no_materials: "No materials added yet.",
+    // Worker location & nearby search
+    my_service_area: "My Service Area", not_set: "Not set",
+    service_radius_km: "Service radius (km)",
+    service_area_explain: "Set your location so property owners can find you nearby. Only owners searching for workers will see your location.",
+    find_workers_near: "Find Workers Near Me",
+    search_location: "Search location", search_radius_km: "Search radius (km)",
+    search: "Search", set_location_first: "Please set your location first",
+    no_workers_found: "No workers found in this area.",
+    // Privacy
+    privacy_note: "Your data is private. Workers can only see their own assignments. Owners can only see their own properties and assigned workers.",
   },
   es: {
-    app_name: "Verde", tagline: "Jardinería, organizada.",
+    app_name: "Habitat", tagline: "Propiedad, organizada.",
     login: "Iniciar sesión", signup: "Crear cuenta", logout: "Salir",
     email: "Correo", password: "Contraseña", name: "Nombre completo",
-    role: "Soy", owner: "Dueño del terreno", worker: "Jardinero / trabajador",
+    role: "Soy", owner: "Propietario", worker: "Trabajador de oficio",
     language: "Idioma principal", continue: "Continuar",
     dashboard: "Panel", properties: "Propiedades", tasks: "Tareas", map: "Mapa",
     photos: "Fotos", crews: "Equipos", people: "Personas", activity: "Actividad",
@@ -186,7 +262,7 @@ const STRINGS = {
     my_recovery: "Mi código de recuperación", show_code: "Mostrar código",
     last_seen: "Última conexión", joined: "Se unió", never: "Nunca",
     enable: "Activar", disable: "Desactivar", disabled: "Desactivada",
-    role_owner: "Dueño del terreno", role_worker: "Jardinero / trabajador",
+    role_owner: "Propietario", role_worker: "Trabajador de oficio",
     in_crews: "En equipos", no_crews_yet: "Todavía no está en un equipo",
     storage: "Almacenamiento", storage_used: "usado por las fotos",
     storage_warning: "El almacenamiento de fotos se está llenando. Elimina algunas fotos antiguas.",
@@ -202,9 +278,9 @@ const STRINGS = {
     worker_mode: "Modo trabajador", worker_mode_on: "Modo trabajador ON", worker_mode_off: "Modo trabajador OFF",
     quick_phrases: "Frases rápidas", phrasebook: "Libro de frases", phrase_inserted: "Frase insertada",
     read_aloud: "Leer en voz alta", stop_reading: "Detener",
-    trade_general: "General", trade_landscaping: "Jardinería",
-    trade_construction: "Construcción", trade_irrigation: "Riego",
-    trade_hardscaping: "Paisajismo duro", trade_tree: "Trabajo de árboles",
+    trade_general: "General", trade_plumbing: "Fontanería",
+        trade_electrical: "Electricidad", trade_landscaping: "Jardinería",
+        trade_hvac: "Climatización", trade_roofing: "Techado",
     category_safety: "Seguridad", category_materials: "Materiales",
     category_tools: "Herramientas", category_scheduling: "Programación",
   },
@@ -231,7 +307,7 @@ export function t(key) {
 /* Translations persist in localStorage so repeat views cost no requests. */
 const MEM = new Map();
 let PERSIST = {};
-try { PERSIST = JSON.parse(localStorage.getItem("verde.translations") || "{}"); }
+try { PERSIST = JSON.parse(localStorage.getItem("habitat.translations") || "{}"); }
 catch { PERSIST = {}; }
 let persistTimer = null;
 
@@ -239,7 +315,7 @@ function rememberPersist() {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    try { localStorage.setItem("verde.translations", JSON.stringify(PERSIST)); }
+    try { localStorage.setItem("habitat.translations", JSON.stringify(PERSIST)); }
     catch { /* storage full — in-memory cache still works */ }
   }, 800);
 }

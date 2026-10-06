@@ -1,4 +1,4 @@
-/* Verde — UI primitives: DOM helpers, toasts, modals, pagination, lazy render. */
+/* Habitat — UI primitives: DOM helpers, toasts, modals, pagination, lazy render. */
 "use strict";
 import { t } from "./i18n.js";
 
@@ -79,8 +79,9 @@ export function textarea(name, opts = {}) {
   return ta;
 }
 
-export function empty(text, actionLabel, onClick) {
+export function empty(text, actionLabel, onClick, icon) {
   const d = el("div", "empty");
+  if (icon) d.appendChild(el("div", "empty-icon", icon));
   d.appendChild(el("p", null, text));
   if (actionLabel && onClick) d.appendChild(btn(actionLabel, "btn", onClick));
   return d;
@@ -123,6 +124,8 @@ export function closeTopModal() {
 export function modal(titleKey, bodyNode, opts = {}) {
   const m = el("div", "modal");
   m.hidden = true;
+  m.setAttribute("role", "dialog");
+  m.setAttribute("aria-modal", "true");
   const back = el("div", "modal-backdrop");
   back.onclick = () => closeModal(m);
   m.appendChild(back);
@@ -155,8 +158,9 @@ function host() {
   return toastHost;
 }
 
-export function toast(message, kind = "info", ms = 2600, actionLabel, onAction) {
+export function toast(message, kind = "info", ms = 2400, actionLabel, onAction) {
   const n = el("div", "toast " + kind);
+  n.setAttribute("role", "status");
   n.appendChild(el("span", null, message));
   if (actionLabel && onAction) {
     const b = el("button", "toast-action", actionLabel);
@@ -167,7 +171,7 @@ export function toast(message, kind = "info", ms = 2600, actionLabel, onAction) 
   requestAnimationFrame(() => n.classList.add("in"));
   setTimeout(() => {
     n.classList.remove("in");
-    setTimeout(() => n.remove(), 250);
+    setTimeout(() => n.remove(), 200);
   }, ms);
   return n;
 }

@@ -1,7 +1,7 @@
-/* Verde — data layer.
+/* Habitat — data layer.
  *
  * Runs on localStorage by default and can be pointed at a real API by setting
- * `window.VERDE_API` before this module loads. Every read/write goes through
+ * `window.HABITAT_API` before this module loads. Every read/write goes through
  * `Store`, so the UI never knows which backend it is talking to.
  *
  * Records are held in arrays for serialisation but indexed into Maps after
@@ -9,8 +9,8 @@
  */
 "use strict";
 
-const DB_KEY = "verde.db";
-const SESSION_KEY = "verde.session";
+const DB_KEY = "habitat.db";
+const SESSION_KEY = "habitat.session";
 const SCHEMA = 2;
 
 function uid(prefix = "") {
@@ -42,12 +42,12 @@ function salt() {
   return [...a].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Human-transcribable recovery code: VERDE-XXXX-XXXX-XXXX */
+/** Human-transcribable recovery code: HABITAT-XXXX-XXXX-XXXX */
 function makeRecoveryCode() {
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
   const part = () => Array.from({ length: 4 }, () =>
     A[Math.floor(Math.random() * A.length)]).join("");
-  return `VERDE-${part()}-${part()}-${part()}`;
+  return `HABITAT-${part()}-${part()}-${part()}`;
 }
 
 const GROUP_COLORS = ["#34d399", "#6ee7ff", "#f5c451", "#ff6b8a", "#a78bfa", "#fb923c", "#4ade80", "#38bdf8"];
@@ -61,7 +61,63 @@ const blankProperty = () => ({
   systemInfo: {},
   utilities: [],
   documents: [],
+  rooms: [],
+  appliances: [],
+  materials: [],
 });
+
+/* Room types for the room-by-room detail view */
+export const ROOM_TYPES = [
+  { value: "kitchen", label: "Kitchen" },
+  { value: "living_room", label: "Living Room" },
+  { value: "bedroom", label: "Bedroom" },
+  { value: "bathroom", label: "Bathroom" },
+  { value: "dining_room", label: "Dining Room" },
+  { value: "office", label: "Office" },
+  { value: "garage", label: "Garage" },
+  { value: "basement", label: "Basement" },
+  { value: "attic", label: "Attic" },
+  { value: "laundry", label: "Laundry" },
+  { value: "hallway", label: "Hallway" },
+  { value: "exterior", label: "Exterior" },
+  { value: "other", label: "Other" },
+];
+
+/* Appliance categories */
+export const APPLIANCE_TYPES = [
+  { value: "hvac", label: "HVAC" },
+  { value: "water_heater", label: "Water Heater" },
+  { value: "refrigerator", label: "Refrigerator" },
+  { value: "oven", label: "Oven/Stove" },
+  { value: "dishwasher", label: "Dishwasher" },
+  { value: "washer", label: "Washer" },
+  { value: "dryer", label: "Dryer" },
+  { value: "garbage_disposal", label: "Garbage Disposal" },
+  { value: "microwave", label: "Microwave" },
+  { value: "range_hood", label: "Range Hood" },
+  { value: "water_softener", label: "Water Softener" },
+  { value: "sump_pump", label: "Sump Pump" },
+  { value: "other", label: "Other" },
+];
+
+/* Material categories for tracking finishes */
+export const MATERIAL_TYPES = [
+  { value: "flooring", label: "Flooring" },
+  { value: "paint", label: "Paint" },
+  { value: "countertop", label: "Countertop" },
+  { value: "backsplash", label: "Backsplash" },
+  { value: "cabinets", label: "Cabinets" },
+  { value: "wall_finish", label: "Wall Finish" },
+  { value: "ceiling", label: "Ceiling" },
+  { value: "trim", label: "Trim/Moulding" },
+  { value: "roofing", label: "Roofing" },
+  { value: "siding", label: "Siding" },
+  { value: "windows", label: "Windows" },
+  { value: "doors", label: "Doors" },
+  { value: "fixtures", label: "Fixtures" },
+  { value: "insulation", label: "Insulation" },
+  { value: "other", label: "Other" },
+];
 
 /* --------------------------------------------------------- API client */
 const API = {
@@ -73,12 +129,12 @@ const API = {
   _reconnectTimer: null,
 
   get enabled() {
-    return typeof window !== "undefined" && !!window.VERDE_API;
+    return typeof window !== "undefined" && !!window.HABITAT_API;
   },
 
   init() {
     if (!this.enabled) return;
-    this.baseUrl = window.VERDE_API.replace(/\/$/, "");
+    this.baseUrl = window.HABITAT_API.replace(/\/$/, "");
   },
 
   /* ---- REST helpers ---- */
@@ -111,7 +167,7 @@ const API = {
 
   _getToken() {
     try {
-      const raw = localStorage.getItem("verde.tokens");
+      const raw = localStorage.getItem("habitat.tokens");
       if (raw) { const t = JSON.parse(raw); return t.access || null; }
     } catch { /* ignore */ }
     return null;
@@ -119,8 +175,8 @@ const API = {
 
   _setTokens(access, refresh) {
     try {
-      if (access) localStorage.setItem("verde.tokens", JSON.stringify({ access, refresh }));
-      else localStorage.removeItem("verde.tokens");
+      if (access) localStorage.setItem("habitat.tokens", JSON.stringify({ access, refresh }));
+      else localStorage.removeItem("habitat.tokens");
     } catch { /* ignore */ }
     // Reconnect WebSocket with new token
     if (this.wsConnected) {
@@ -239,7 +295,7 @@ export const Store = {
     } else {
       // migrate the v1 database if it is present
       let old = null;
-      try { old = localStorage.getItem("verde.db.v1"); } catch { old = null; }
+      try { old = localStorage.getItem("habitat.db.v1"); } catch { old = null; }
       if (old) {
         try { this.db = this._migrate(JSON.parse(old)); } catch { this.db = blank(); }
       } else {
@@ -325,7 +381,7 @@ export const Store = {
       this._dirty = false;
       return true;
     } catch (e) {
-      console.error("verde: save failed", e);
+      console.error("habitat: save failed", e);
       return false;
     }
   },
@@ -342,7 +398,7 @@ export const Store = {
     try {
       localStorage.removeItem(DB_KEY);
       localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem("verde.translations");
+      localStorage.removeItem("habitat.translations");
     } catch { /* ignore */ }
   },
 
@@ -421,22 +477,17 @@ export const Store = {
     return true;
   },
 
-  /** Recovery-code reset — the only reset path that works with no mail server. */
-  async resetWithCode(email, code, next) {
+  /** Simple email + new password reset (no recovery code needed). */
+  async resetPassword(email, next) {
     email = (email || "").trim().toLowerCase();
     const u = this.idx.usersByEmail.get(email);
     if (!u) throw new Error("no_account");
-    if (!u.recoveryHash) throw new Error("no_recovery");
-    const norm = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
-    if (u.recoveryHash !== await sha256(u.salt + norm)) throw new Error("bad_code");
     if (!next || next.length < 8) throw new Error("weak_password");
     u.salt = salt();
     u.pw = await sha256(u.salt + next);
-    const fresh = makeRecoveryCode();
-    u.recoveryHash = await sha256(u.salt + fresh);
     this.log(u.id, "account.password_reset");
     this.save();
-    return { user: this.publicUser(u), recoveryCode: fresh };
+    return { user: this.publicUser(u) };
   },
 
   async regenerateRecovery(userId, password) {
@@ -587,6 +638,7 @@ export const Store = {
       lat: lat ?? null, lng: lng ?? null,
       workers: [], groups: [],
       systemInfo: {}, utilities: [], documents: [],
+      rooms: [], appliances: [], materials: [],
       createdAt: new Date().toISOString(),
     };
     this.db.properties.push(p);
@@ -754,6 +806,268 @@ export const Store = {
     p.documents = (p.documents || []).filter((x) => x.id !== docId);
     this.log(p.ownerId, "property.document_deleted", { property: p.name });
     this.save();
+  },
+
+  /* --------------------------------------------- property info: rooms */
+  addRoom(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.rooms = p.rooms || [];
+    const r = {
+      id: uid("r"),
+      name: data.name || "",
+      type: data.type || "other",
+      floorLevel: data.floorLevel || "",
+      dimensions: data.dimensions || "",
+      flooring: data.flooring || "",
+      flooringColor: data.flooringColor || "",
+      wallColor: data.wallColor || "",
+      ceilingColor: data.ceilingColor || "",
+      trimColor: data.trimColor || "",
+      windowType: data.windowType || "",
+      windowCount: data.windowCount || "",
+      notes: data.notes || "",
+      photoId: data.photoId || null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
+    };
+    p.rooms.push(r);
+    this.log(p.ownerId, "property.room_added", { property: p.name, room: r.name });
+    this.save();
+    return r;
+  },
+
+  updateRoom(propId, roomId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    const r = (p.rooms || []).find((x) => x.id === roomId);
+    if (!r) return null;
+    Object.assign(r, data);
+    this.log(p.ownerId, "property.room_updated", { property: p.name });
+    this.save();
+    return r;
+  },
+
+  deleteRoom(propId, roomId) {
+    const p = this.property(propId);
+    if (!p) return;
+    p.rooms = (p.rooms || []).filter((x) => x.id !== roomId);
+    this.log(p.ownerId, "property.room_deleted", { property: p.name });
+    this.save();
+  },
+
+  /* ----------------------------------------- property info: appliances */
+  addAppliance(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.appliances = p.appliances || [];
+    const a = {
+      id: uid("ap"),
+      name: data.name || "",
+      type: data.type || "other",
+      brand: data.brand || "",
+      model: data.model || "",
+      serialNumber: data.serialNumber || "",
+      yearInstalled: data.yearInstalled || "",
+      warrantyExpiry: data.warrantyExpiry || "",
+      room: data.room || "",
+      notes: data.notes || "",
+      photoId: data.photoId || null,
+    };
+    p.appliances.push(a);
+    this.log(p.ownerId, "property.appliance_added", { property: p.name, appliance: a.name });
+    this.save();
+    return a;
+  },
+
+  updateAppliance(propId, applianceId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    const a = (p.appliances || []).find((x) => x.id === applianceId);
+    if (!a) return null;
+    Object.assign(a, data);
+    this.log(p.ownerId, "property.appliance_updated", { property: p.name });
+    this.save();
+    return a;
+  },
+
+  deleteAppliance(propId, applianceId) {
+    const p = this.property(propId);
+    if (!p) return;
+    p.appliances = (p.appliances || []).filter((x) => x.id !== applianceId);
+    this.log(p.ownerId, "property.appliance_deleted", { property: p.name });
+    this.save();
+  },
+
+  /* ------------------------------------------ property info: materials */
+  addMaterial(propId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    p.materials = p.materials || [];
+    const m = {
+      id: uid("m"),
+      name: data.name || "",
+      type: data.type || "other",
+      color: data.color || "",
+      finish: data.finish || "",
+      brand: data.brand || "",
+      productCode: data.productCode || "",
+      room: data.room || "",
+      dateInstalled: data.dateInstalled || "",
+      notes: data.notes || "",
+      photoId: data.photoId || null,
+    };
+    p.materials.push(m);
+    this.log(p.ownerId, "property.material_added", { property: p.name, material: m.name });
+    this.save();
+    return m;
+  },
+
+  updateMaterial(propId, materialId, data) {
+    const p = this.property(propId);
+    if (!p) return null;
+    const m = (p.materials || []).find((x) => x.id === materialId);
+    if (!m) return null;
+    Object.assign(m, data);
+    this.log(p.ownerId, "property.material_updated", { property: p.name });
+    this.save();
+    return m;
+  },
+
+  deleteMaterial(propId, materialId) {
+    const p = this.property(propId);
+    if (!p) return;
+    p.materials = (p.materials || []).filter((x) => x.id !== materialId);
+    this.log(p.ownerId, "property.material_deleted", { property: p.name });
+    this.save();
+  },
+
+  /* ------------------------------------- worker location & service area */
+  setWorkerLocation(userId, lat, lng) {
+    const u = this.idx.users.get(userId);
+    if (!u) return null;
+    u.serviceLat = lat;
+    u.serviceLng = lng;
+    this.log(userId, "worker.location_set");
+    this.save();
+    return this.publicUser(u);
+  },
+
+  setWorkerServiceArea(userId, radiusKm) {
+    const u = this.idx.users.get(userId);
+    if (!u) return null;
+    u.serviceRadiusKm = radiusKm;
+    this.log(userId, "worker.service_area_set", { radiusKm });
+    this.save();
+    return this.publicUser(u);
+  },
+
+  /**
+   * Find workers near a given location. Only returns workers who have set
+   * their location. Distance is calculated with the Haversine formula.
+   * Returns array of { user, distanceKm } sorted by distance.
+   */
+  findWorkersNear(lat, lng, maxKm = 50) {
+    const R = 6371; // Earth radius in km
+    const toRad = (d) => (d * Math.PI) / 180;
+    const workers = this.db.users.filter((u) =>
+      u.role === "worker" && u.active && u.serviceLat != null && u.serviceLng != null
+    );
+    const results = [];
+    for (const w of workers) {
+      const dLat = toRad(w.serviceLat - lat);
+      const dLng = toRad(w.serviceLng - lng);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat)) * Math.cos(toRad(w.serviceLat)) *
+        Math.sin(dLng / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const dist = R * c;
+      if (dist <= maxKm) {
+        results.push({ user: this.publicUser(w), distanceKm: Math.round(dist * 10) / 10 });
+      }
+    }
+    results.sort((a, b) => a.distanceKm - b.distanceKm);
+    return results;
+  },
+
+  /* ------------------------------------------------------ privacy */
+  /**
+   * Privacy: workers can only see their own data. They cannot see other
+   * workers' profiles, other owners' data, or properties they're not
+   * assigned to. This method returns a sanitized view of a user record
+   * that is safe for the given viewer.
+   */
+  publicUserForUser(targetUserId, viewerId) {
+    const target = this.idx.users.get(targetUserId);
+    const viewer = this.idx.users.get(viewerId);
+    if (!target || !viewer) return null;
+    // Users can always see themselves
+    if (target.id === viewer.id) return this.publicUser(target);
+    // Workers cannot see other workers
+    if (viewer.role === "worker" && target.role === "worker") return null;
+    // Workers cannot see owners (except through assignment)
+    if (viewer.role === "worker" && target.role === "owner") return null;
+    // Owners cannot see other owners
+    if (viewer.role === "owner" && target.role === "owner") return null;
+    // Owners can see workers who are assigned to their properties
+    if (viewer.role === "owner" && target.role === "worker") {
+      const myProps = this.idx.propsByOwner.get(viewer.id) || [];
+      const myPropIds = new Set(myProps.map((p) => p.id));
+      const assigned = this.db.properties.some((p) =>
+        myPropIds.has(p.id) && (p.workers || []).includes(target.id)
+      );
+      if (!assigned) return null;
+    }
+    return this.publicUser(target);
+  },
+
+  /**
+   * Privacy: get a list of workers visible to the given owner. Only returns
+   * workers who are assigned to at least one of the owner's properties or
+   * are in one of the owner's crews.
+   */
+  visibleWorkersFor(ownerId) {
+    const owner = this.idx.users.get(ownerId);
+    if (!owner || owner.role !== "owner") return [];
+    const myProps = this.idx.propsByOwner.get(ownerId) || [];
+    const myPropIds = new Set(myProps.map((p) => p.id));
+    const myCrewIds = new Set((this.idx.groupsByOwner.get(ownerId) || []).map((g) => g.id));
+    const visible = new Set();
+    for (const p of this.db.properties) {
+      if (!myPropIds.has(p.id)) continue;
+      for (const wid of (p.workers || [])) visible.add(wid);
+      for (const gid of (p.groups || [])) {
+        if (myCrewIds.has(gid)) {
+          const g = this.idx.groups.get(gid);
+          if (g) for (const mid of g.memberIds) visible.add(mid);
+        }
+      }
+    }
+    return [...visible].map((id) => this.publicUser(this.idx.users.get(id))).filter(Boolean);
+  },
+
+  /**
+   * Privacy: check if a user can see a property's full details.
+   * Owners see their own properties. Workers see only assigned properties.
+   */
+  canViewProperty(user, propertyId) {
+    if (!user) return false;
+    const p = this.idx.properties.get(propertyId);
+    if (!p) return false;
+    if (user.role === "owner") return p.ownerId === user.id;
+    if (p.workers.includes(user.id)) return true;
+    const myGroups = new Set(this.idx.groupsByMember.get(user.id) || []);
+    return (p.groups || []).some((g) => myGroups.has(g));
+  },
+
+  /**
+   * Privacy: check if a user can edit a property's details.
+   * Only the owner can edit. Workers can only view.
+   */
+  canEditProperty(user, propertyId) {
+    if (!user || user.role !== "owner") return false;
+    const p = this.idx.properties.get(propertyId);
+    return p && p.ownerId === user.id;
   },
 
   /* --------------------------------------------------------------- tasks */
@@ -937,91 +1251,7 @@ export const Store = {
     };
   },
 
-  /* ---------------------------------------------------------- demo seeds */
-  async seedDemo() {
-    const existing = this.idx.usersByEmail.get("owner@demo.com");
-    if (existing) return this.publicUser(existing);
 
-    const { user: owner } = await this.signup({
-      name: "Maria Alvarez", email: "owner@demo.com", password: "demo1234",
-      role: "owner", language: "en",
-    });
-    const { user: diego } = await this.signup({
-      name: "Diego Ramirez", email: "worker@demo.com", password: "demo1234",
-      role: "worker", language: "es",
-    });
-    const { user: ana } = await this.signup({
-      name: "Ana Silva", email: "ana@demo.com", password: "demo1234",
-      role: "worker", language: "pt",
-    });
-    const { user: kenji } = await this.signup({
-      name: "Kenji Sato", email: "kenji@demo.com", password: "demo1234",
-      role: "worker", language: "ja",
-    });
-
-    const crew = this.addGroup({
-      ownerId: owner.id, name: "Garden Crew",
-      description: "Hedges, planting and irrigation", color: "#34d399",
-    });
-    const builders = this.addGroup({
-      ownerId: owner.id, name: "Build Crew",
-      description: "Fencing, paths and hard landscaping", color: "#f5c451",
-    });
-    this.setGroupMembers(crew.id, [diego.id, ana.id]);
-    this.setGroupMembers(builders.id, [kenji.id]);
-
-    const p1 = this.addProperty({
-      ownerId: owner.id, name: "Casa Alvarez", address: "Solvang, CA",
-      lat: 34.5958, lng: -120.1376, notes: "Front and back garden, drip irrigation.",
-    });
-    const p2 = this.addProperty({
-      ownerId: owner.id, name: "Vineyard Cottage", address: "Ballard, CA",
-      lat: 34.6181, lng: -120.1214, notes: "Olive trees need trimming.",
-    });
-    const p3 = this.addProperty({
-      ownerId: owner.id, name: "Ranch House", address: "Los Olivos, CA",
-      lat: 34.6675, lng: -120.1146, notes: "Long driveway, two acres.",
-    });
-    this.assignGroup(p1.id, crew.id);
-    this.assignGroup(p2.id, crew.id);
-    this.assignGroup(p3.id, builders.id);
-
-    const today = new Date();
-    const iso = (d) => new Date(today.getTime() + d * 86400000).toISOString().slice(0, 10);
-
-    this.addTask({
-      propertyId: p1.id, createdBy: owner.id, title: "Replace the front fence",
-      description: "The left gate post is rotting. I want a darker wood this time, not the same colour.",
-      priority: "high", lat: 34.5975, lng: -120.1352, assigneeId: kenji.id, dueDate: iso(3), trade: "general",
-    });
-    this.addTask({
-      propertyId: p1.id, createdBy: owner.id, title: "Trim the hedge lower",
-      description: "Cut it about 30cm lower than last time so it doesn't block the window.",
-      priority: "normal", lat: 34.5944, lng: -120.1395, assigneeId: diego.id, dueDate: iso(7), trade: "landscaping",
-    });
-    this.addTask({
-      propertyId: p2.id, createdBy: owner.id, title: "Fix the drip line by the olive trees",
-      description: "The far line is blocked — water pools near the trunk.",
-      priority: "high", lat: 34.6201, lng: -120.1193, assigneeId: diego.id, dueDate: iso(-1), trade: "landscaping",
-    });
-    this.addTask({
-      propertyId: p2.id, createdBy: owner.id, title: "Re-seed the back lawn",
-      description: "Patchy near the path.", priority: "low",
-      lat: 34.6162, lng: -120.1238, dueDate: iso(21), trade: "landscaping",
-    });
-    this.addTask({
-      propertyId: p3.id, createdBy: owner.id, title: "Lay gravel on the driveway",
-      description: "Use the same grey as the courtyard, not the warm tan.",
-      priority: "normal", lat: 34.6691, lng: -120.1163, assigneeId: kenji.id, dueDate: iso(10), trade: "general",
-    });
-    const doneTask = this.db.tasks[3];
-    this.setTaskStatus(doneTask.id, "done", diego.id);
-    this.addComment(this.db.tasks[0].id, owner.id, "Please match the colour to the shutters.");
-    this.addComment(this.db.tasks[0].id, kenji.id, "Understood — I'll bring samples.");
-
-    this.commit();
-    return this.publicUser(owner);
-  },
 
   /* -------------------------------------------- WebSocket event handling */
   _handleTaskChanged(msg) {
@@ -1049,7 +1279,7 @@ export const Store = {
   _handleNotification(notif) {
     // Show a toast or in-app notification
     // The UI can subscribe to this via API.on("notification", handler)
-    console.log("verde: notification", notif);
+    console.log("habitat: notification", notif);
   },
 
   initWebSocket() {

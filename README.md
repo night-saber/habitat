@@ -1,6 +1,6 @@
-# Verde — Landscaping, organised
+# Habitat — Property, organised
 
-A web app that connects **land owners** with **gardeners**, so change requests travel as photos and pinned locations instead of texts and guesswork.
+A web app that connects **property owners** with **trade workers** (plumbing, electrical, HVAC, roofing, landscaping, general contracting, and more), so change requests travel as photos and pinned locations instead of texts and guesswork.
 
 Two ways to run it: as a **static client** (no server, data in the browser) or against the **included API server** (real accounts, shared data).
 
@@ -8,9 +8,9 @@ Two ways to run it: as a **static client** (no server, data in the browser) or a
 
 ## The idea
 
-Landscaping jobs go wrong in a predictable way: the owner describes what they want in words, the worker pictures something different, and the disagreement surfaces after the work is done.
+Property maintenance jobs go wrong in a predictable way: the owner describes what they want in words, the worker pictures something different, and the disagreement surfaces after the work is done.
 
-Verde fixes that by making the *request* itself visual and located:
+Habitat fixes that by making the *request* itself visual and located:
 
 - The owner photographs the exact thing they want changed and writes what they want instead
 - The photo is pinned to a spot on the map
@@ -21,12 +21,12 @@ Verde fixes that by making the *request* itself visual and located:
 ## Features
 
 ### Accounts
-- **Land owner** — add properties, post change requests, attach photos, pin locations, manage crews
-- **Gardener / worker** — see every property assigned to them (directly or through a crew), work a task list, upload completion photos as proof
-- **Password reset** — every account gets a one-time **recovery code** (`VERDE-XXXX-XXXX-XXXX`) shown once at signup. It is the only way back in without email, and it is re-issued automatically on every reset. Change your password from Settings, or generate a fresh recovery code any time.
+- **Property owner** — add properties, post change requests, attach photos, pin locations, manage crews
+- **Trade worker** — see every property assigned to them (directly or through a crew), work a task list, upload completion photos as proof
+- **Password reset** — every account gets a one-time **recovery code** (`HABITAT-XXXX-XXXX-XXXX`) shown once at signup. It is the only way back in without email, and it is re-issued automatically on every reset. Change your password from Settings, or generate a fresh recovery code any time.
 
 ### Crews (sub-groups)
-Workers are organised into **named crews** you define — "Garden Crew", "Build Crew", whatever fits.
+Workers are organised into **named crews** you define — "Alpha Team", "Beta Team", whatever fits.
 
 - Add and remove workers from a crew
 - Assign a **whole crew to a property** in one action, instead of adding people one at a time
@@ -46,7 +46,7 @@ Leaflet + OpenStreetMap (free, no API key), styled dark to match the app.
 - A legend explains every marker
 
 ### Automatic translation
-Every account picks a primary language at signup — 17 to choose from. The whole interface switches, and **user-written content is translated automatically** through the free MyMemory API. An English-speaking owner and a Spanish-speaking gardener each write in their own language and read the other in theirs. Translated text is tinted cyan. Translations are cached, so repeat views cost no requests.
+Every account picks a primary language at signup — 17 to choose from. The whole interface switches, and **user-written content is translated automatically** through the free MyMemory API. An English-speaking owner and a Spanish-speaking worker each write in their own language and read the other in theirs. Translated text is tinted cyan. Translations are cached, so repeat views cost no requests.
 
 ### Task workflow
 `Open → In progress → Done`, with priority levels, due dates, overdue highlighting, per-task comments, and completion photos.
@@ -91,11 +91,11 @@ Click **Try the demo** to load a seeded account — 3 properties, 5 tasks, 3 wor
 | Account | Email | Language |
 |---|---|---|
 | Owner | `owner@demo.com` | English |
-| Worker — Garden Crew | `worker@demo.com` | Español |
-| Worker — Garden Crew | `ana@demo.com` | Português |
-| Worker — Build Crew | `kenji@demo.com` | 日本語 |
+| Worker — Alpha Team (Plumbing) | `worker@demo.com` | Español |
+| Worker — Alpha Team (Electrical) | `ana@demo.com` | Português |
+| Worker — Beta Team (HVAC) | `kenji@demo.com` | 日本語 |
 
-Log in as the owner to see all three properties and both crews. Log in as `ana@demo.com` and she sees only the two Garden Crew properties. Log in as `kenji@demo.com` and he sees only the Build Crew property. That's the crew isolation working.
+Log in as the owner to see all three properties and both crews. Log in as `ana@demo.com` and she sees only the two Alpha Team properties. Log in as `kenji@demo.com` and he sees only the Beta Team property. That's the crew isolation working.
 
 ---
 
@@ -107,7 +107,7 @@ The static client stores everything in one browser. For more than one person, us
 cd server
 pip install fastapi uvicorn "sqlalchemy>=2" "passlib[argon2]" python-jose \
             python-multipart pydantic-settings aiofiles email-validator
-export VERDE_SECRET="$(python -c 'import secrets;print(secrets.token_urlsafe(48))')"
+export HABITAT_SECRET="$(python -c 'import secrets;print(secrets.token_urlsafe(48))')"
 uvicorn main:app --reload
 ```
 
@@ -131,14 +131,14 @@ Tenant isolation lives in one function — `visible_property_ids()` — and ever
 Add this before the module script in `index.html`:
 
 ```html
-<script>window.VERDE_API = "http://localhost:8000";</script>
+<script>window.HABITAT_API = "http://localhost:8000";</script>
 ```
 
 ### Deploying for real traffic
 
 The server is written to run behind a process manager, but a single box will not serve 10,000 daily users comfortably. The changes that matter, in order:
 
-1. **Postgres instead of SQLite** — set `VERDE_DB=postgresql+psycopg://...`. SQLite serialises writes; this is the first bottleneck.
+1. **Postgres instead of SQLite** — set `HABITAT_DB=postgresql+psycopg://...`. SQLite serialises writes; this is the first bottleneck.
 2. **Object storage for photos** — swap the local write in `upload_photo` for S3/R2, and serve via a CDN. Photo bytes dominate traffic.
 3. **A CDN in front of the static client** — it is already fully static, so this is free on Cloudflare Pages or Netlify.
 4. **Run several API workers** — `uvicorn --workers 4` behind nginx or Caddy.

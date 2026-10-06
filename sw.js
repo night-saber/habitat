@@ -1,7 +1,7 @@
-/* Verde — service worker for offline support. */
+/* Habitat — service worker for offline support. */
 "use strict";
 
-const CACHE_NAME = "verde-v1";
+const CACHE_NAME = "habitat-v1";
 const APP_SHELL = [
   "./",
   "./index.html",

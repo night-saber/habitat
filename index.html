@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Verde" />
+<meta name="apple-mobile-web-app-title" content="Habitat" />
 <meta name="mobile-web-app-capable" content="yes" />
-<title>Verde — Landscaping, organised</title>
-<meta name="description" content="Verde connects land owners and gardeners: photo change requests, a live map of every job, crews, and automatic translation." />
+<title>Habitat — Property, organised</title>
+<meta name="description" content="Habitat connects property owners and trade workers: photo change requests, a live map of every job, crews, and automatic translation." />
 <meta name="theme-color" content="#0a1310" />
 <meta name="color-scheme" content="dark" />
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://unpkg.com" />
 <link rel="preconnect" href="https://tile.openstreetmap.org" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="css/style.css?v=9" />
+<link rel="stylesheet" href="css/style.css?v=11" />
 <script type="importmap">
 {
   "imports": {
@@ -28,6 +28,7 @@
 </script>
 </head>
 <body>
+<a href="#main" class="sr-only" style="position:fixed;top:8px;left:8px;z-index:9999;background:var(--green);color:#04150f;padding:8px 16px;border-radius:8px;font-weight:600;">Skip to main content</a>
 
 <!-- ============================== AUTH ============================== -->
 <div id="auth" class="auth-wrap">
@@ -35,8 +36,8 @@
     <div class="brand-row">
       <span class="logo" aria-hidden="true">🌿</span>
       <div>
-        <h1 data-i18n="app_name">Verde</h1>
-        <p class="tagline" data-i18n="tagline">Landscaping, organised.</p>
+        <h1 data-i18n="app_name">Habitat</h1>
+        <p class="tagline" data-i18n="tagline">Property, organised.</p>
       </div>
       <label class="lang-mini">
         <span class="sr-only">Language</span>
@@ -58,7 +59,6 @@
           <input type="password" name="password" autocomplete="current-password" required />
         </label>
         <button class="btn wide" type="submit" data-i18n="login">Log in</button>
-        <button class="btn ghost wide" type="button" id="demoBtn" data-i18n="demo_login">Try the demo</button>
         <p class="swap">
           <button type="button" class="link" id="toSignup" data-i18n="signup">Create account</button>
           <span class="dot-sep">·</span>
@@ -84,8 +84,8 @@
         <label class="field">
           <span data-i18n="role">I am a</span>
           <select name="role" required>
-            <option value="owner" data-i18n="owner">Land owner</option>
-            <option value="worker" data-i18n="worker">Gardener / worker</option>
+            <option value="owner" data-i18n="owner">Property owner</option>
+                        <option value="worker" data-i18n="worker">Trade worker</option>
           </select>
         </label>
         <label class="field">
@@ -95,13 +95,13 @@
         <label class="field" id="signupTradeField" hidden>
           <span data-i18n="trade">Trade specialization</span>
           <select name="trade" id="signupTrade">
-            <option value="" data-i18n="trade_general">General</option>
-            <option value="landscaping" data-i18n="trade_landscaping">Landscaping</option>
-            <option value="construction" data-i18n="trade_construction">Construction</option>
-            <option value="irrigation" data-i18n="trade_irrigation">Irrigation</option>
-            <option value="hardscaping" data-i18n="trade_hardscaping">Hardscaping</option>
-            <option value="tree" data-i18n="trade_tree">Tree work</option>
-          </select>
+                      <option value="" data-i18n="trade_general">General</option>
+                      <option value="plumbing" data-i18n="trade_plumbing">Plumbing</option>
+                      <option value="electrical" data-i18n="trade_electrical">Electrical</option>
+                      <option value="landscaping" data-i18n="trade_landscaping">Landscaping</option>
+                      <option value="hvac" data-i18n="trade_hvac">HVAC</option>
+                      <option value="roofing" data-i18n="trade_roofing">Roofing</option>
+                    </select>
         </label>
         <button class="btn wide" type="submit" data-i18n="signup">Create account</button>
         <p class="swap">
@@ -115,11 +115,6 @@
         <label class="field">
           <span data-i18n="email">Email</span>
           <input type="email" name="email" autocomplete="email" required />
-        </label>
-        <label class="field">
-          <span data-i18n="recovery_code">Recovery code</span>
-          <input type="text" name="code" placeholder="VERDE-XXXX-XXXX-XXXX"
-                 autocapitalize="characters" spellcheck="false" required />
         </label>
         <label class="field">
           <span data-i18n="new_password">New password</span>
@@ -151,7 +146,7 @@
   <header class="topbar">
     <div class="top-left">
       <span class="logo sm" aria-hidden="true">🌿</span>
-      <strong data-i18n="app_name">Verde</strong>
+      <strong data-i18n="app_name">Habitat</strong>
     </div>
     <div class="top-right">
       <div class="who">
@@ -171,7 +166,7 @@
 
   <nav class="tabs" id="tabs" role="tablist"></nav>
 
-  <section class="stats">
+  <section class="stats" aria-label="Statistics">
     <div class="stat"><b id="stProps">0</b><span data-i18n="stats_props">Properties</span></div>
     <div class="stat"><b id="stOpen">0</b><span data-i18n="stats_open">Open tasks</span></div>
     <div class="stat"><b id="stOverdue">0</b><span data-i18n="stats_overdue">Overdue</span></div>
@@ -183,39 +178,47 @@
     </div>
   </section>
 
-  <main class="main">
-    <div class="view" data-view="dashboard" id="dashBody"></div>
-    <div class="view" data-view="properties" id="propsBody" hidden></div>
-    <div class="view" data-view="tasks" id="tasksBody" hidden></div>
-    <div class="view" data-view="crews" id="crewsBody" hidden></div>
-    <div class="view" data-view="people" id="peopleBody" hidden></div>
-    <div class="view" data-view="map" hidden>
-      <div class="row-between">
-        <h2 data-i18n="map">Map</h2>
-        <div class="map-controls">
-          <select id="mapProp" class="inline" aria-label="Property filter"></select>
-          <button class="btn ghost sm" id="useMyLoc" data-i18n="use_my_location">Use my location</button>
-        </div>
-      </div>
-      <div id="mapCanvas" class="map"></div>
-      <div class="map-legend">
-        <span class="lg"><i class="sw pin"></i><span data-i18n="properties">Properties</span></span>
-        <span class="lg"><i class="sw high"></i><span data-i18n="high">High</span></span>
-        <span class="lg"><i class="sw normal"></i><span data-i18n="normal">Normal</span></span>
-        <span class="lg"><i class="sw low"></i><span data-i18n="low">Low</span></span>
-        <span class="lg"><i class="sw photo"></i><span data-i18n="photos">Photos</span></span>
-      </div>
-      <p class="muted sm" id="pinHint" hidden></p>
+  <main class="main" id="main">
+    <div class="view" data-view="dashboard" id="dashBody">
+      <div id="dashMain"></div>
+      <div id="propsBody" hidden></div>
+      <div id="activityBody" hidden></div>
     </div>
-    <div class="view" data-view="photos" id="photosBody" hidden></div>
-    <div class="view" data-view="activity" id="activityBody" hidden></div>
+    <div class="view" data-view="tasks" id="tasksBody" hidden></div>
+    <div class="view" data-view="map" hidden>
+      <div id="mapMain">
+        <div class="row-between">
+          <h2 data-i18n="map">Map</h2>
+          <div class="map-controls">
+            <select id="mapProp" class="inline" aria-label="Property filter"></select>
+            <button class="btn ghost sm" id="useMyLoc" data-i18n="use_my_location">Use my location</button>
+          </div>
+        </div>
+        <div id="mapCanvas" class="map"></div>
+        <div class="map-legend">
+          <span class="lg"><i class="sw pin"></i><span data-i18n="properties">Properties</span></span>
+          <span class="lg"><i class="sw high"></i><span data-i18n="high">High</span></span>
+          <span class="lg"><i class="sw normal"></i><span data-i18n="normal">Normal</span></span>
+          <span class="lg"><i class="sw low"></i><span data-i18n="low">Low</span></span>
+          <span class="lg"><i class="sw photo"></i><span data-i18n="photos">Photos</span></span>
+        </div>
+        <p class="muted sm" id="pinHint" hidden></p>
+      </div>
+      <div id="photosBody" hidden></div>
+      <div id="scanBody" hidden></div>
+    </div>
+    <div class="view" data-view="people" id="peopleBody">
+      <div id="crewsBody" hidden></div>
+    </div>
     <div class="view" data-view="settings" id="settingsBody" hidden></div>
-    <div class="view" data-view="scan" id="scanBody" hidden></div>
   </main>
+
+  <!-- Floating camera button (mobile) -->
+  <button id="cameraFab" class="camera-fab" aria-label="Take a photo" hidden>📷</button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-<script type="module" src="js/app.js?v=14"></script>
+<script type="module" src="js/app.js?v=15"></script>
 <script type="module" src="js/mobile.js?v=1"></script>
 </body>
 </html>

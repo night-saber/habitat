@@ -1,4 +1,4 @@
-/* Verde — mobile & field-ready enhancements.
+/* Habitat — mobile & field-ready enhancements.
  *
  * Provides:
  *  1. Service worker registration (offline support)
@@ -51,7 +51,7 @@ function showInstallButton() {
   if (!deferredPrompt) return;
   const btn = document.createElement("button");
   btn.className = "btn ghost sm install-btn";
-  btn.textContent = "📲 Install Verde";
+  btn.textContent = "📲 Install Habitat";
   btn.onclick = async () => {
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
@@ -131,7 +131,7 @@ function quickCompleteTask(taskId, card) {
   card.style.opacity = "0";
   setTimeout(() => {
     // Dispatch a custom event that app.js can listen for
-    document.dispatchEvent(new CustomEvent("verde:quickComplete", { detail: { taskId } }));
+    document.dispatchEvent(new CustomEvent("habitat:quickComplete", { detail: { taskId } }));
   }, 200);
 }
 
@@ -140,7 +140,7 @@ function cycleTaskStatus(taskId, card) {
   card.style.transform = "translateX(120%)";
   card.style.opacity = "0";
   setTimeout(() => {
-    document.dispatchEvent(new CustomEvent("verde:cycleStatus", { detail: { taskId } }));
+    document.dispatchEvent(new CustomEvent("habitat:cycleStatus", { detail: { taskId } }));
   }, 200);
 }
 
@@ -196,7 +196,7 @@ function initPullToRefresh() {
       ptrIndicator.innerHTML = "<span>⟳ Refreshing…</span>";
       ptrIndicator.style.top = "10px";
       setTimeout(() => {
-        document.dispatchEvent(new CustomEvent("verde:refresh"));
+        document.dispatchEvent(new CustomEvent("habitat:refresh"));
         ptrIndicator.style.top = "-50px";
         ptrIndicator.innerHTML = "<span>↓ Pull to refresh</span>";
       }, 400);
@@ -372,9 +372,9 @@ function initHaptics() {
   });
 
   // Haptic on task status changes
-  document.addEventListener("verde:quickComplete", () => vibrate([30, 50, 30]));
-  document.addEventListener("verde:cycleStatus", () => vibrate(20));
-  document.addEventListener("verde:refresh", () => vibrate(15));
+  document.addEventListener("habitat:quickComplete", () => vibrate([30, 50, 30]));
+  document.addEventListener("habitat:cycleStatus", () => vibrate(20));
+  document.addEventListener("habitat:refresh", () => vibrate(15));
 }
 
 /* ------------------------------------------- 9. map mobile optimization */

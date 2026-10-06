@@ -1,5 +1,5 @@
 """
-Verde — WebSocket connection manager.
+Habitat — WebSocket connection manager.
 
 Tracks authenticated WebSocket connections and provides targeted broadcasting:
 - send_to_user(user_id, message) — deliver to one user's connections
@@ -21,7 +21,7 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger("verde.ws")
+logger = logging.getLogger("habitat.ws")
 
 
 class ConnectionManager:

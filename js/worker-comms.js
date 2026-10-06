@@ -1,4 +1,4 @@
-/* Verde — worker communication & trade language system.
+/* Habitat — worker communication & trade language system.
  *
  * Provides:
  *  - Worker mode toggle (trade-specific UI terminology)
@@ -16,11 +16,11 @@ import {
 /* ----------------------------------------------------------- trade list */
 export const PHRASE_TRADES = [
   { id: "general", label: "General" },
+  { id: "plumbing", label: "Plumbing" },
+  { id: "electrical", label: "Electrical" },
   { id: "landscaping", label: "Landscaping" },
-  { id: "construction", label: "Construction" },
-  { id: "irrigation", label: "Irrigation" },
-  { id: "hardscaping", label: "Hardscaping" },
-  { id: "tree", label: "Tree work" },
+  { id: "hvac", label: "HVAC" },
+  { id: "roofing", label: "Roofing" },
 ];
 
 export const TRADE_CATEGORIES = [
@@ -67,6 +67,51 @@ export const PHRASEBOOK = {
       { en: "Finished early today", es: "Terminé temprano hoy", pt: "Terminei cedo hoje" },
     ],
   },
+  plumbing: {
+    safety: [
+      { en: "Water pressure high — caution", es: "Presión de agua alta — precaución", pt: "Pressão da água alta — cuidado" },
+      { en: "Electrical near water", es: "Electricidad cerca del agua", pt: "Eletricidade perto da água" },
+      { en: "Backflow preventer installed", es: "Preventor de reflujo instalado", pt: "Preventor de refluxo instalado" },
+    ],
+    materials: [
+      { en: "Pipe pressure tested", es: "Tubería probada a presión", pt: "Tubulação testada sob pressão" },
+      { en: "Filter cleaned", es: "Filtro limpiado", pt: "Filtro limpo" },
+      { en: "Valve replaced", es: "Válvula reemplazada", pt: "Válvula substituída" },
+      { en: "Cartridge ordered", es: "Cartucho pedido", pt: "Cartucho encomendado" },
+    ],
+    tools: [
+      { en: "Pressure gauge ready", es: "Manómetro listo", pt: "Manômetro pronto" },
+      { en: "Pipe cutter sharp", es: "Cortatubos afilado", pt: "Cortador de tubos afiado" },
+      { en: "Torch for PVC ready", es: "Soplete para PVC listo", pt: "Maçarico para PVC pronto" },
+    ],
+    scheduling: [
+      { en: "Water at dawn for best results", es: "Riegue al amanecer para mejores resultados", pt: "Regue ao amanhecer para melhores resultados" },
+      { en: "Avoid midday heat", es: "Evite el calor del mediodía", pt: "Evite o calor do meio-dia" },
+      { en: "Check system after rain", es: "Revise el sistema después de la lluvia", pt: "Verifique o sistema após a chuva" },
+    ],
+  },
+  electrical: {
+    safety: [
+      { en: "Circuit de-energized", es: "Circuito desenergizado", pt: "Circuito desenergizado" },
+      { en: "Lockout tagout in place", es: "Bloqueo y etiquetado en su lugar", pt: "Bloqueio e etiquetagem no lugar" },
+      { en: "Test before touching", es: "Pruebe antes de tocar", pt: "Teste antes de tocar" },
+    ],
+    materials: [
+      { en: "Wire gauge correct", es: "Calibre de cable correcto", pt: "Bitola do fio correta" },
+      { en: "Breaker size matched", es: "Tamaño de interruptor coincidente", pt: "Tamanho do disjuntor correspondente" },
+      { en: "Conduit fitted", es: "Conducto instalado", pt: "Eletroduto instalado" },
+    ],
+    tools: [
+      { en: "Multimeter calibrated", es: "Multímetro calibrado", pt: "Multímetro calibrado" },
+      { en: "Fish tape ready", es: "Cinta pasacables lista", pt: "Fita passacabo pronta" },
+      { en: "Wire strippers sharp", es: "Pelacables afilado", pt: "Alicate de corte afiado" },
+    ],
+    scheduling: [
+      { en: "Power shutdown at noon", es: "Corte de energía al mediodía", pt: "Corte de energia ao meio-dia" },
+      { en: "Panel upgrade takes 4 hours", es: "La actualización del panel toma 4 horas", pt: "A atualização do painel leva 4 horas" },
+      { en: "Inspection scheduled", es: "Inspección programada", pt: "Inspeção agendada" },
+    ],
+  },
   landscaping: {
     safety: [
       { en: "Chemical spray in progress", es: "Pulverización química en curso", pt: "Pulverização química em andamento" },
@@ -90,94 +135,48 @@ export const PHRASEBOOK = {
       { en: "Seasonal timing matters", es: "El momento estacional es importante", pt: "O momento sazonal é importante" },
     ],
   },
-  construction: {
+  hvac: {
     safety: [
-      { en: "Hard hat area — no exceptions", es: "Área de casco obligatorio — sin excepciones", pt: "Área de capacete obrigatório — sem exceções" },
-      { en: "Steel toe boots required", es: "Botas con punta de acero obligatorias", pt: "Botas com biqueira de aço obrigatórias" },
-      { en: "Dust mask needed", es: "Se necesita mascarilla contra el polvo", pt: "Máscara contra poeira necessária" },
-      { en: "Scaffold inspection complete", es: "Inspección de andamios completada", pt: "Inspeção de andaimes concluída" },
+      { en: "Refrigerant handling — certified only", es: "Manejo de refrigerante — solo certificados", pt: "Manuseio de refrigerante — apenas certificados" },
+      { en: "Electrical disconnect off", es: "Desconexión eléctrica apagada", pt: "Desconexão elétrica desligada" },
+      { en: "Ductwork hot — do not touch", es: "Conductos calientes — no tocar", pt: "Dutos quentes — não tocar" },
     ],
     materials: [
-      { en: "Concrete cured properly", es: "Hormigón curado correctamente", pt: "Concreto curado corretamente" },
-      { en: "Rebar in place", es: "Armadura de acero colocada", pt: "Armadura de aço colocada" },
-      { en: "Formwork removed", es: "Encofrado retirado", pt: "Forma removida" },
-      { en: "Curing time needed", es: "Tiempo de curado necesario", pt: "Tempo de cura necessário" },
+      { en: "Filter size correct", es: "Tamaño de filtro correcto", pt: "Tamanho do filtro correto" },
+      { en: "Refrigerant charged", es: "Refrigerante cargado", pt: "Refrigerante carregado" },
+      { en: "Duct sealant applied", es: "Sellador de conductos aplicado", pt: "Selador de dutos aplicado" },
     ],
     tools: [
-      { en: "Cement mixer ready", es: "Mezcladora de cemento lista", pt: "Betoneira pronta" },
-      { en: "Level checked", es: "Nivel verificado", pt: "Nível verificado" },
-      { en: "Square verified", es: "Escuadra verificada", pt: "Esquadro verificado" },
-      { en: "Plumb line set", es: "Línea de plomada colocada", pt: "Linha de prumo colocada" },
+      { en: "Manifold gauge set ready", es: "Juego de manómetros listo", pt: "Conjunto de manômetros pronto" },
+      { en: "Vacuum pump running", es: "Bomba de vacío funcionando", pt: "Bomba de vácuo funcionando" },
+      { en: "Leak detector calibrated", es: "Detector de fugas calibrado", pt: "Detector de vazamentos calibrado" },
     ],
     scheduling: [
-      { en: "Concrete pour at dawn", es: "Vertido de hormigón al amanecer", pt: "Concretagem ao amanhecer" },
-      { en: "Weather dependent", es: "Depende del clima", pt: "Depende do clima" },
-      { en: "Cure before load", es: "Curar antes de cargar", pt: "Curar antes de carregar" },
+      { en: "System recharge takes 2 hours", es: "La recarga del sistema toma 2 horas", pt: "A recarga do sistema leva 2 horas" },
+      { en: "Best done in mild weather", es: "Mejor en clima templado", pt: "Melhor em clima ameno" },
+      { en: "Annual service due", es: "Servicio anual pendiente", pt: "Manutenção anual devida" },
     ],
   },
-  irrigation: {
+  roofing: {
     safety: [
-      { en: "Water pressure high — caution", es: "Presión de agua alta — precaución", pt: "Pressão da água alta — cuidado" },
-      { en: "Electrical near water", es: "Electricidad cerca del agua", pt: "Eletricidade perto da água" },
-      { en: "Backflow preventer installed", es: "Preventor de reflujo instalado", pt: "Preventor de refluxo instalado" },
-    ],
-    materials: [
-      { en: "Emitter clogged", es: "Emisor obstruido", pt: "Emissor entupido" },
-      { en: "Pipe pressure tested", es: "Tubería probada a presión", pt: "Tubulação testada sob pressão" },
-      { en: "Filter cleaned", es: "Filtro limpiado", pt: "Filtro limpo" },
-      { en: "Valve replaced", es: "Válvula reemplazada", pt: "Válvula substituída" },
-    ],
-    tools: [
-      { en: "Pressure gauge ready", es: "Manómetro listo", pt: "Manômetro pronto" },
-      { en: "Pipe cutter sharp", es: "Cortatubos afilado", pt: "Cortador de tubos afiado" },
-      { en: "Torch for PVC ready", es: "Soplete para PVC listo", pt: "Maçarico para PVC pronto" },
-    ],
-    scheduling: [
-      { en: "Water at dawn for best results", es: "Riegue al amanecer para mejores resultados", pt: "Regue ao amanhecer para melhores resultados" },
-      { en: "Avoid midday heat", es: "Evite el calor del mediodía", pt: "Evite o calor do meio-dia" },
-      { en: "Check system after rain", es: "Revise el sistema después de la lluvia", pt: "Verifique o sistema após a chuva" },
-    ],
-  },
-  hardscaping: {
-    safety: [
-      { en: "Stone cutting — eye protection required", es: "Corte de piedra — protección ocular obligatoria", pt: "Corte de pedra — proteção ocular obrigatória" },
-      { en: "Heavy paver lifting — team lift", es: "Levantamiento de adoquines pesados — levanten en equipo", pt: "Levantamento de pavers pesados — levantem em equipe" },
-      { en: "Silica dust warning", es: "Advertencia de polvo de sílice", pt: "Aviso de poeira de sílica" },
-    ],
-    materials: [
-      { en: "Base compacted and ready", es: "Base compactada y lista", pt: "Base compactada e pronta" },
-      { en: "Sand screeded level", es: "Arena nivelada", pt: "Areia nivelada" },
-      { en: "Edge restraint set", es: "Restricción de borde colocada", pt: "Restrição de borda colocada" },
-      { en: "Joint sand applied", es: "Arena de juntas aplicada", pt: "Areia de juntas aplicada" },
-    ],
-    tools: [
-      { en: "Plate compactor rented", es: "Compactador de placa alquilado", pt: "Compactador de placa alugado" },
-      { en: "Wet saw available", es: "Sierra húmeda disponible", pt: "Serra molhada disponível" },
-      { en: "Rubber mallet on site", es: "Mazo de goma en el sitio", pt: "Martelo de borracha no local" },
-    ],
-    scheduling: [
-      { en: "Base must cure before laying", es: "La base debe curar antes de colocar", pt: "A base deve curar antes de assentar" },
-      { en: "Avoid laying in rain", es: "Evite colocar bajo la lluvia", pt: "Evite assentar na chuva" },
-      { en: "Temperature sensitive adhesive", es: "Adhesivo sensible a la temperatura", pt: "Adesivo sensível à temperatura" },
-    ],
-  },
-  tree: {
-    safety: [
-      { en: "Climbing gear inspected", es: "Equipo de escalada inspeccionado", pt: "Equipamento de escalada inspecionado" },
-      { en: "Drop zone clear", es: "Zona de caída despejada", pt: "Zona de queda livre" },
+      { en: "Fall protection harness on", es: "Arnés de protección contra caídas puesto", pt: "Cinto de proteção contra quedas vestido" },
+      { en: "Ladder secured at base", es: "Escalera asegurada en la base", pt: "Escada fixada na base" },
       { en: "Power line nearby — extreme caution", es: "Línea eléctrica cerca — precaución extrema", pt: "Linha elétrica perto — cuidado extremo" },
     ],
     materials: [
-      { en: "Wood chips delivered", es: "Astillas de madera entregadas", pt: "Cascas de madeira entregues" },
-      { en: "Stump grinder ready", es: "Trituradora de tocones lista", pt: "Triturador de tocos pronto" },
+      { en: "Shingles matched to existing", es: "Tejas coincidentes con las existentes", pt: "Telhas correspondentes às existentes" },
+      { en: "Flashing sealed", es: "Flash sellado", pt: "Rufo selado" },
+      { en: "Underlayment in place", es: "Subcapa colocada", pt: "Manta de subcobertura colocada" },
     ],
     tools: [
-      { en: "Chainsaw sharpened", es: "Motosierra afilada", pt: "Motosserra afiada" },
-      { en: "Rope and harness checked", es: "Cuerda y arnés revisados", pt: "Corda e arnês verificados" },
+      { en: "Nail gun charged", es: "Clavadora cargada", pt: "Pistola de pregos carregada" },
+      { en: "Roofing shovel ready", es: "Pala de techado lista", pt: "Pá de telhado pronta" },
+      { en: "Chalk line set", es: "Liza de tiza colocada", pt: "Linha de giz colocada" },
     ],
     scheduling: [
-      { en: "Best done in dormant season", es: "Mejor en temporada de reposo", pt: "Melhor na estação de dormência" },
-      { en: "Avoid nesting season", es: "Evite la temporada de anidación", pt: "Evite a época de nidificação" },
+      { en: "Weather window: clear skies", es: "Ventana de clima: cielo despejado", pt: "Janela de clima: céu limpo" },
+      { en: "Tear-off before noon", es: "Desmantelamiento antes del mediodía", pt: "Remoção antes do meio-dia" },
+      { en: "Cure time needed for sealant", es: "Tiempo de curado necesario para el sellador", pt: "Tempo de cura necessário para o selador" },
     ],
   },
 };
@@ -190,40 +189,47 @@ export const TRADE_TERMS = {
   "steel toe boots": { es: "botas con punta de acero", pt: "botas com biqueira de aço", fr: "bouts de sécurité", de: "stahlkappenschuhe" },
   "safety glasses": { es: "gafas de seguridad", pt: "óculos de segurança", fr: "lunettes de sécurité", de: "schutzbrille" },
   "power tool": { es: "herramienta eléctrica", pt: "ferramenta elétrica", fr: "outil électrique", de: "elektrowerkzeug" },
-  "concrete": { es: "hormigón", pt: "concreto", fr: "béton", de: "beton" },
-  "rebar": { es: "armadura de acero", pt: "armadura de aço", fr: "armature", de: "bewehrung" },
-  "formwork": { es: "encofrado", pt: "forma", fr: "coffrage", de: "schalung" },
-  "scaffold": { es: "andamio", pt: "andaime", fr: "échafaudage", de: "gerüst" },
+  "circuit breaker": { es: "interruptor automático", pt: "disjuntor", fr: "disjoncteur", de: "leistungsschalter" },
+  "outlet": { es: "tomacorriente", pt: "tomada", fr: "prise", de: "steckdose" },
+  "conduit": { es: "conducto", pt: "eletroduto", fr: "conduit", de: "rohrleitung" },
+  "wire gauge": { es: "calibre de cable", pt: "bitola do fio", fr: "calibre de fil", de: "leiterquerschnitt" },
+  "multimeter": { es: "multímetro", pt: "multímetro", fr: "multimètre", de: "multimeter" },
+  "refrigerant": { es: "refrigerante", pt: "refrigerante", fr: "réfrigérant", de: "kältemittel" },
+  "compressor": { es: "compresor", pt: "compressor", fr: "compresseur", de: "verdichter" },
+  "thermostat": { es: "termostato", pt: "termostato", fr: "thermostat", de: "thermostat" },
+  "air filter": { es: "filtro de aire", pt: "filtro de ar", fr: "filtre à air", de: "luftfilter" },
+  "ductwork": { es: "conductos de aire", pt: "dutos de ar", fr: "gaine de ventilation", de: "luftleitung" },
+  "shingle": { es: "teja", pt: "telha", fr: "bardeau", de: "dachziegel" },
+  "flashing": { es: "flash", pt: "rufo", fr: "solin", de: "blechabdichtung" },
+  "gutter": { es: "canalón", pt: "calha", fr: "gouttière", de: "dachrinne" },
+  "downspout": { es: "bajante", pt: "tubo de descida", fr: "descente de gouttière", de: "fallrohr" },
+  "underlayment": { es: "subcapa", pt: "manta de subcobertura", fr: "sous-toiture", de: "unterspannbahn" },
+  "faucet": { es: "grifo", pt: "torneira", fr: "robinet", de: "armatur" },
+  "valve": { es: "válvula", pt: "válvula", fr: "vanne", de: "ventil" },
+  "cartridge": { es: "cartucho", pt: "cartucho", fr: "cartouche", de: "kartusche" },
+  "drain": { es: "desagüe", pt: "ralo", fr: "évacuation", de: "ablauf" },
+  "pipe": { es: "tubería", pt: "tubulação", fr: "tuyau", de: "rohr" },
+  "water heater": { es: "calentador de agua", pt: "aquecedor de água", fr: "chauffe-eau", de: "wasserbereiter" },
+  "pressure regulator": { es: "regulador de presión", pt: "regulador de pressão", fr: "régulateur de pression", de: "druckregler" },
   "backflow preventer": { es: "preventor de reflujo", pt: "preventor de refluxo", fr: "clapet anti-retour", de: "rückflussverhinderer" },
-  "emitter": { es: "emisor", pt: "emissor", fr: "émetteur", de: "strahler" },
-  "drip line": { es: "línea de goteo", pt: "linha de gotejamento", fr: "ligne goutte-à-goutte", de: "tropfleitung" },
+  "fall protection": { es: "protección contra caídas", pt: "proteção contra quedas", fr: "protection contre les chutes", de: "sturzsicherung" },
+  "harness": { es: "arnés", pt: "cinto", fr: "harnais", de: "klettergurt" },
+  "ladder": { es: "escalera", pt: "escada", fr: "échelle", de: "leiter" },
+  "nail gun": { es: "clavadora", pt: "pistola de pregos", fr: "cloueuse", de: "nagelpistole" },
   "mulch": { es: "mantillo", pt: "cobertura morta", fr: "paillis", de: "mulch" },
   "hedge trimmer": { es: "podadora de setos", pt: "aparador de cerca", fr: "taille-haie", de: "heckenschere" },
-  "plate compactor": { es: "compactador de placa", pt: "compactador de placa", fr: "plaque vibrante", de: "rüttelplatte" },
-  "wet saw": { es: "sierra húmeda", pt: "serra molhada", fr: "scie humide", de: "nasssäge" },
-  "plumb line": { es: "línea de plomada", pt: "linha de prumo", fr: "fil à plomb", de: "lotschnur" },
-  "base compacted": { es: "base compactada", pt: "base compactada", fr: "base compactée", de: "untergrund verdichtet" },
-  "edge restraint": { es: "restricción de borde", pt: "restrição de borda", fr: "bordure de retenue", de: "randbegrenzung" },
-  "joint sand": { es: "arena de juntas", pt: "areia de juntas", fr: "sable de joint", de: "fugensand" },
-  "chainsaw": { es: "motosierra", pt: "motosserra", fr: "tronçonneuse", de: "kettensäge" },
-  "stump grinder": { es: "trituradora de tocones", pt: "triturador de tocos", fr: "broyeur de souches", de: "stumpffräse" },
-  "climbing gear": { es: "equipo de escalada", pt: "equipamento de escalada", fr: "équipement d'escalade", de: "kletterausrüstung" },
-  "drop zone": { es: "zona de caída", pt: "zona de queda", fr: "zone de chute", de: "abwurfzone" },
-  "pressure gauge": { es: "manómetro", pt: "manômetro", fr: "manomètre", de: "manometer" },
-  "pipe cutter": { es: "cortatubos", pt: "cortador de tubos", fr: "coupe-tube", de: "rohrschneider" },
   "chemical spray": { es: "pulverización química", pt: "pulverização química", fr: "pulvérisation chimique", de: "chemisches sprühen" },
   "soil pH": { es: "pH del suelo", pt: "pH do solo", fr: "pH du sol", de: "boden-pH" },
-  "seed germinating": { es: "semillas germinando", pt: "sementes germinando", fr: "graines en germination", de: "keimende samen" },
   "power line": { es: "línea eléctrica", pt: "linha elétrica", fr: "ligne électrique", de: "stromleitung" },
-  "dormant season": { es: "temporada de reposo", pt: "estação de dormência", fr: "saison de dormance", de: "ruhezeit" },
-  "nesting season": { es: "temporada de anidación", pt: "época de nidificação", fr: "saison de nidification", de: "brutsaison" },
-  "curing time": { es: "tiempo de curado", pt: "tempo de cura", fr: "temps de durcissement", de: "aushärtezeit" },
-  "concrete pour": { es: "vertido de hormigón", pt: "concretagem", fr: "coulage de béton", de: "betoneinbau" },
+  "lockout tagout": { es: "bloqueo y etiquetado", pt: "bloqueio e etiquetagem", fr: "consignation", de: "stilllegung" },
+  "manifold gauge": { es: "manómetro", pt: "manômetro", fr: "manomètre", de: "manometer" },
+  "vacuum pump": { es: "bomba de vacío", pt: "bomba de vácuo", fr: "pompe à vide", de: "vakuumpumpe" },
+  "leak detector": { es: "detector de fugas", pt: "detector de vazamentos", fr: "détecteur de fuite", de: "lecksucher" },
   "weather dependent": { es: "depende del clima", pt: "depende do clima", fr: "dépend de la météo", de: "wetterabhängig" },
 };
 
 /* --------------------------------------------------------- worker mode */
-const WORKER_MODE_KEY = "verde.workerMode";
+const WORKER_MODE_KEY = "habitat.workerMode";
 let workerMode = false;
 
 export function isWorkerMode() { return workerMode; }

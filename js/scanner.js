@@ -1,4 +1,4 @@
-/* Verde — 3D property scanner.
+/* Habitat — 3D property scanner.
  *
  * Uses the device camera to capture frames and builds a rough 3D point cloud
  * using frame differencing and motion estimation. Renders the result in a
@@ -29,6 +29,11 @@ const GRID_SIZE = 6;
 const DIFF_THRESHOLD = 30;
 const DEPTH_SCALE = 2.0;
 const XY_SCALE = 2.0;
+
+const SCAN_MODES = {
+  indoor: { label: "Indoor", depthScale: 1.5, xyScale: 1.5, threshold: 25 },
+  outdoor: { label: "Outdoor", depthScale: 3.0, xyScale: 3.0, threshold: 35 },
+};
 
 /* ---------------------------------------------------------- frame processing */
 
@@ -128,6 +133,9 @@ class Scanner {
     this.isScanning = false;
     this.destroyed = false;
     this.scanName = "";
+    this.scanMode = "indoor";
+    this.roomSegments = [];
+    this.currentRoom = null;
   }
 
   async init() {
@@ -168,10 +176,36 @@ class Scanner {
     };
     bar.appendChild(field("properties", propSel));
 
+    const modeSel = select("scanMode", [
+      { value: "indoor", label: t("indoor") || "Indoor" },
+      { value: "outdoor", label: t("outdoor") || "Outdoor" },
+    ]);
+    modeSel.onchange = () => {
+      this.scanMode = modeSel.value;
+      this.points = [];
+      this.updateThreePointCloud();
+    };
+    bar.appendChild(field("scan_mode", modeSel));
+
     const nameInput = input("scanName", { placeholder: t("scan_name_ph") });
     nameInput.value = this.scanName;
     nameInput.oninput = () => { this.scanName = nameInput.value; };
     bar.appendChild(field("scan_name", nameInput));
+
+    // Room-by-room controls
+    const roomBar = el("div", "scan-room-bar");
+    const roomInput = input("roomName", { placeholder: t("room_name_ph") || "Room name (e.g. Living Room)" });
+    roomBar.appendChild(field("room_name", roomInput));
+    const addRoomBtn = btn(t("add_room") || "Add Room", "btn ghost sm", () => {
+      const name = roomInput.value.trim();
+      if (!name) return;
+      this.currentRoom = name;
+      this.roomSegments.push({ name, startFrame: this.frameCount, points: [] });
+      toast(t("room_added") || `Room "${name}" started`, "good");
+      roomInput.value = "";
+    });
+    roomBar.appendChild(addRoomBtn);
+    c.appendChild(roomBar);
 
     c.appendChild(bar);
 
@@ -235,6 +269,16 @@ class Scanner {
     exportBtn.disabled = true;
     actions.appendChild(exportBtn);
     this.exportBtn = exportBtn;
+
+    const exportObjBtn = btn("OBJ", "btn ghost", () => this.exportScan("obj"));
+    exportObjBtn.disabled = true;
+    actions.appendChild(exportObjBtn);
+    this.exportObjBtn = exportObjBtn;
+
+    const exportPlyBtn = btn("PLY", "btn ghost", () => this.exportScan("ply"));
+    exportPlyBtn.disabled = true;
+    actions.appendChild(exportPlyBtn);
+    this.exportPlyBtn = exportPlyBtn;
 
     const resetBtn = btn(t("reset_view"), "btn ghost", () => this.resetView());
     actions.appendChild(resetBtn);
@@ -384,6 +428,8 @@ class Scanner {
     this.camStatus.textContent = "";
     this.saveBtn.disabled = this.points.length === 0;
     this.exportBtn.disabled = this.points.length === 0;
+    this.exportObjBtn.disabled = this.points.length === 0;
+    this.exportPlyBtn.disabled = this.points.length === 0;
     this.clearBtn.disabled = this.points.length === 0;
   }
 
@@ -414,6 +460,8 @@ class Scanner {
     this.updateThreePointCloud();
     this.saveBtn.disabled = false;
     this.exportBtn.disabled = false;
+    this.exportObjBtn.disabled = false;
+    this.exportPlyBtn.disabled = false;
     this.clearBtn.disabled = false;
   }
 
@@ -540,6 +588,8 @@ class Scanner {
     this.updateThreePointCloud();
     this.saveBtn.disabled = false;
     this.exportBtn.disabled = false;
+    this.exportObjBtn.disabled = false;
+    this.exportPlyBtn.disabled = false;
     this.clearBtn.disabled = false;
     toast(t("loaded"), "good");
   }
@@ -550,6 +600,8 @@ class Scanner {
     this.updateThreePointCloud();
     this.saveBtn.disabled = true;
     this.exportBtn.disabled = true;
+    this.exportObjBtn.disabled = true;
+    this.exportPlyBtn.disabled = true;
     this.clearBtn.disabled = true;
   }
 
@@ -560,20 +612,51 @@ class Scanner {
     this.controls.update();
   }
 
-  exportScan() {
+  exportScan(format = "json") {
     if (this.points.length === 0) return;
-    const data = {
-      name: this.scanName || "scan",
-      exportedAt: new Date().toISOString(),
-      pointCount: this.points.length,
-      points: this.points,
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `verde-scan-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const ts = Date.now();
+    if (format === "obj") {
+      let obj = "# Habitat 3D Scan\n";
+      obj += `# ${this.scanName || "scan"} — ${this.points.length} points\n`;
+      for (const p of this.points) {
+        obj += `v ${p.x.toFixed(4)} ${p.y.toFixed(4)} ${p.z.toFixed(4)} ${(p.r/255).toFixed(4)} ${(p.g/255).toFixed(4)} ${(p.b/255).toFixed(4)}\n`;
+      }
+      const blob = new Blob([obj], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `habitat-scan-${ts}.obj`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } else if (format === "ply") {
+      let ply = "ply\n";
+      ply += "format ascii 1.0\n";
+      ply += `element vertex ${this.points.length}\n`;
+      ply += "property float x\nproperty float y\nproperty float z\n";
+      ply += "property uchar red\nproperty uchar green\nproperty uchar blue\n";
+      ply += "end_header\n";
+      for (const p of this.points) {
+        ply += `${p.x.toFixed(4)} ${p.y.toFixed(4)} ${p.z.toFixed(4)} ${p.r} ${p.g} ${p.b}\n`;
+      }
+      const blob = new Blob([ply], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `habitat-scan-${ts}.ply`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } else {
+      const data = {
+        name: this.scanName || "scan",
+        exportedAt: new Date().toISOString(),
+        pointCount: this.points.length,
+        points: this.points,
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `habitat-scan-${ts}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
   }
 
   showError(msg) {

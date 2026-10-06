@@ -1,4 +1,4 @@
-/* Verde — application shell, routing, auth and views. */
+/* Habitat — application shell, routing, auth and views. */
 "use strict";
 import { Store, GROUP_COLORS } from "./store.js";
 import {
@@ -22,6 +22,7 @@ import { initMobile, vibrate } from "./mobile.js";
 /* ---------------------------------------------------------------- state */
 let ME = null;
 let view = "dashboard";
+let subtab = null;
 let activeProperty = null;
 let query = "";
 let taskFilter = "all";
@@ -86,31 +87,47 @@ function showApp() {
 }
 
 /* ------------------------------------------------------------- nav tabs */
+const MAIN_TABS = ["dashboard", "tasks", "map", "people", "settings"];
+const SUBTABS = {
+  dashboard: ["properties", "activity"],
+  people: ["crews"],
+  map: ["photos", "scan"],
+};
+
 function buildNav() {
   const nav = $("#tabs");
   nav.innerHTML = "";
-  const tabs = ME.role === "owner"
-    ? ["dashboard", "properties", "tasks", "crews", "people", "map", "photos", "activity", "scan"]
-    : ["dashboard", "properties", "tasks", "map", "photos"];
-  tabs.forEach((v) => {
+  MAIN_TABS.forEach((v) => {
     const b = btn(t(v), "navbtn", () => go(v));
     b.dataset.view = v;
     b.setAttribute("data-i18n", v);
     nav.appendChild(b);
+    const subs = SUBTABS[v];
+    if (subs) {
+      const wrap = el("div", "subtab-group");
+      wrap.dataset.parent = v;
+      subs.forEach((sv) => {
+        const sb = btn(t(sv), "subtab", () => { subtab = sv; go(v); });
+        sb.dataset.subtab = sv;
+        wrap.appendChild(sb);
+      });
+      nav.appendChild(wrap);
+    }
   });
-  const set = btn(t("settings"), "navbtn", () => go("settings"));
-  set.dataset.view = "settings";
-  set.setAttribute("data-i18n", "settings");
-  nav.appendChild(set);
 }
 
 function go(v) {
   view = v;
+  if (!SUBTABS[v]) subtab = null;
   $$(".navbtn").forEach((b) => {
     const on = b.dataset.view === v;
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
+  });
+  $$(".subtab").forEach((b) => {
+    const on = b.dataset.subtab === subtab;
+    b.classList.toggle("active", on);
   });
   $$(".view").forEach((s) => { s.hidden = s.dataset.view !== v; });
   render();
@@ -120,16 +137,30 @@ function go(v) {
 function render() {
   if (!ME) return;
   renderStats();
-  if (view === "dashboard") renderDashboard();
-  else if (view === "properties") renderProperties();
+  if (view === "dashboard") {
+    $("#dashMain").hidden = !!subtab;
+    $("#propsBody").hidden = subtab !== "properties";
+    $("#activityBody").hidden = subtab !== "activity";
+    if (subtab === "properties") renderProperties();
+    else if (subtab === "activity") renderActivity();
+    else renderDashboard();
+  }
   else if (view === "tasks") renderTasks();
-  else if (view === "crews") renderCrews();
-  else if (view === "people") renderPeople();
-  else if (view === "map") renderMapView();
-  else if (view === "photos") renderPhotos();
-  else if (view === "activity") renderActivity();
+  else if (view === "map") {
+    $("#mapMain").hidden = !!subtab;
+    $("#photosBody").hidden = subtab !== "photos";
+    $("#scanBody").hidden = subtab !== "scan";
+    if (subtab === "photos") renderPhotos();
+    else if (subtab === "scan") renderScanner();
+    else renderMapView();
+  }
+  else if (view === "people") {
+    $("#peopleBody").hidden = !!subtab;
+    $("#crewsBody").hidden = subtab !== "crews";
+    if (subtab === "crews") renderCrews();
+    else renderPeople();
+  }
   else if (view === "settings") renderSettings();
-  else if (view === "scan") renderScanner();
   applyStaticI18n($("#app"));
   autoTranslateContent();
 }
@@ -373,7 +404,7 @@ function completeTask(task) {
 
 /* --------------------------------------------------------- dashboard */
 function renderDashboard() {
-  const wrap = $("#dashBody");
+  const wrap = $("#dashMain");
   wrap.innerHTML = "";
   const props = Store.propertiesFor(ME);
   const tasks = Store.tasksForUser(ME);
@@ -699,12 +730,21 @@ function renderCrews() {
 function renderPeople() {
   const wrap = $("#peopleBody");
   wrap.innerHTML = "";
-  const workers = Store.workers();
 
   const hd = el("div", "row-between");
   hd.appendChild(el("h2", null, t("people")));
   wrap.appendChild(hd);
 
+  // Worker: show my location settings
+  if (ME.role === "worker") {
+    wrap.appendChild(renderWorkerLocationPanel());
+    return;
+  }
+
+  // Owner: show nearby worker search + assigned workers
+  wrap.appendChild(renderNearbyWorkerSearch());
+
+  const workers = Store.visibleWorkersFor(ME.id);
   if (!workers.length) { wrap.appendChild(empty(t("no_crews"))); return; }
 
   const list = el("div", "people-list");
@@ -723,6 +763,7 @@ function renderPeople() {
     const bits = [];
     bits.push(`${t("language")}: ${(LANGS.find((l) => l.code === w.language) || {}).name || w.language}`);
     if (w.lastSeen) bits.push(`${t("last_seen")}: ${relTime(w.lastSeen)}`);
+    if (w.trade) bits.push(`${t("trade")}: ${t("trade_" + w.trade)}`);
     info.appendChild(el("span", "muted xs", bits.join(" · ")));
     row.appendChild(info);
 
@@ -747,6 +788,109 @@ function renderPeople() {
     list.appendChild(row);
   });
   wrap.appendChild(list);
+}
+
+/* Worker location settings panel */
+function renderWorkerLocationPanel() {
+  const card = el("div", "card");
+  card.appendChild(el("h3", null, t("my_service_area")));
+
+  const u = Store.user(ME.id);
+  const locText = u.serviceLat != null
+    ? `${u.serviceLat.toFixed(5)}, ${u.serviceLng.toFixed(5)}`
+    : t("not_set");
+
+  const locRow = el("div", "inline-row");
+  locRow.appendChild(el("span", "coord", locText));
+  const locBtn = btn(t("use_my_location"), "btn ghost sm", () => {
+    if (!navigator.geolocation) return toast("Geolocation unavailable", "bad");
+    navigator.geolocation.getCurrentPosition((pos) => {
+      Store.setWorkerLocation(ME.id, pos.coords.latitude, pos.coords.longitude);
+      toast(t("saved"), "good");
+      render();
+    }, () => toast("Location denied", "bad"));
+  });
+  locRow.appendChild(locBtn);
+  card.appendChild(field("my_location", locRow));
+
+  const radiusInp = input("radius", { type: "number", value: u.serviceRadiusKm || 25, min: 1, max: 200 });
+  card.appendChild(field("service_radius_km", radiusInp));
+
+  const saveBtn = btn(t("save"), "btn sm", () => {
+    const r = parseInt(radiusInp.value, 10);
+    if (r > 0) {
+      Store.setWorkerServiceArea(ME.id, r);
+      toast(t("saved"), "good");
+    }
+  });
+  card.appendChild(saveBtn);
+
+  card.appendChild(el("p", "muted sm", t("service_area_explain")));
+  return card;
+}
+
+/* Nearby worker search for owners */
+function renderNearbyWorkerSearch() {
+  const card = el("div", "card");
+  card.appendChild(el("h3", null, t("find_workers_near")));
+
+  const coord = el("span", "coord", "—");
+  const locBtn = btn(t("use_my_location"), "btn ghost sm", () => {
+    if (!navigator.geolocation) return toast("Geolocation unavailable", "bad");
+    navigator.geolocation.getCurrentPosition((pos) => {
+      coord.dataset.lat = pos.coords.latitude;
+      coord.dataset.lng = pos.coords.longitude;
+      coord.textContent = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+    }, () => toast("Location denied", "bad"));
+  });
+  const locRow = el("div", "inline-row");
+  locRow.appendChild(coord);
+  locRow.appendChild(locBtn);
+  card.appendChild(field("search_location", locRow));
+
+  const radiusInp = input("radius", { type: "number", value: 25, min: 1, max: 200 });
+  card.appendChild(field("search_radius_km", radiusInp));
+
+  const results = el("div", "nearby-results");
+  results.id = "nearbyResults";
+  card.appendChild(results);
+
+  const searchBtn = btn(t("search"), "btn sm", () => {
+    const lat = parseFloat(coord.dataset.lat);
+    const lng = parseFloat(coord.dataset.lng);
+    if (isNaN(lat) || isNaN(lng)) {
+      toast(t("set_location_first"), "bad");
+      return;
+    }
+    const maxKm = parseInt(radiusInp.value, 10) || 25;
+    const found = Store.findWorkersNear(lat, lng, maxKm);
+    results.innerHTML = "";
+    if (!found.length) {
+      results.appendChild(el("p", "muted sm", t("no_workers_found")));
+      return;
+    }
+    const list = el("div", "people-list");
+    found.forEach(({ user, distanceKm }) => {
+      const row = el("div", "person-row");
+      const av = el("span", "avatar", initial(user.name));
+      av.style.background = avatarColour(user.id);
+      row.appendChild(av);
+      const info = el("div", "person-info");
+      info.appendChild(el("b", null, user.name));
+      info.appendChild(el("span", "muted sm", user.email));
+      const meta = el("span", "muted xs");
+      const bits = [`${distanceKm} km`];
+      if (user.trade) bits.push(t("trade_" + user.trade));
+      meta.textContent = bits.join(" · ");
+      info.appendChild(meta);
+      row.appendChild(info);
+      list.appendChild(row);
+    });
+    results.appendChild(list);
+  });
+  card.appendChild(searchBtn);
+
+  return card;
 }
 
 /* -------------------------------------------------------------- photos */
@@ -824,28 +968,59 @@ function renderActivity() {
 }
 
 /* ---------------------------------------------------------------- map */
+function initMap() {
+  const node = $("#mapCanvas");
+  if (!node) return;
+
+  map = L.map(node, { zoomControl: true, preferCanvas: true })
+    .setView([34.5958, -120.1376], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+  map.on("click", (e) => {
+    pendingPin = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if (pinLayer) map.removeLayer(pinLayer);
+    pinLayer = L.circleMarker([pendingPin.lat, pendingPin.lng],
+      { radius: 9, color: "#34d399", fillColor: "#34d399", fillOpacity: .85 }).addTo(map);
+    const hint = $("#pinHint");
+    if (hint) {
+      hint.textContent = `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`;
+      hint.hidden = false;
+    }
+  });
+
+  // Try to center on the user's actual location
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+      },
+      () => {
+        // Geolocation denied — fall back to user's properties
+        centerOnUserProperties();
+      },
+      { timeout: 5000 }
+    );
+  } else {
+    centerOnUserProperties();
+  }
+}
+
+function centerOnUserProperties() {
+  const props = Store.propertiesFor(ME).filter((p) => p.lat != null && p.lng != null);
+  if (props.length) {
+    const bounds = props.map((p) => [p.lat, p.lng]);
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+  }
+}
+
 function renderMapView() {
   const node = $("#mapCanvas");
   if (!node) return;
 
   if (!map) {
-    map = L.map(node, { zoomControl: true, preferCanvas: true })
-      .setView([34.5958, -120.1376], 12);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
-    map.on("click", (e) => {
-      pendingPin = { lat: e.latlng.lat, lng: e.latlng.lng };
-      if (pinLayer) map.removeLayer(pinLayer);
-      pinLayer = L.circleMarker([pendingPin.lat, pendingPin.lng],
-        { radius: 9, color: "#34d399", fillColor: "#34d399", fillOpacity: .85 }).addTo(map);
-      const hint = $("#pinHint");
-      if (hint) {
-        hint.textContent = `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`;
-        hint.hidden = false;
-      }
-    });
+    initMap();
   }
   setTimeout(() => map.invalidateSize(), 60);
   drawMarkers();
@@ -1034,7 +1209,7 @@ function renderSettings() {
     const blob = new Blob([Store.exportJSON()], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "verde-backup.json";
+    a.download = "habitat-backup.json";
     a.click();
     URL.revokeObjectURL(a.href);
   }));
@@ -1480,13 +1655,12 @@ async function doReset(e) {
   const f = e.target;
   if (f.next.value !== f.confirm.value) return authError("passwords_dont_match");
   try {
-    const { recoveryCode } = await Store.resetWithCode(f.email.value, f.code.value, f.next.value);
+    await Store.resetPassword(f.email.value, f.next.value);
     $("#resetForm").hidden = true;
     $("#loginForm").hidden = false;
     toast(t("saved"), "good");
-    showRecoveryCode(recoveryCode, true);
   } catch (err) {
-    authError(err.message || "bad_code");
+    authError(err.message || "no_account");
   }
 }
 
@@ -1559,14 +1733,6 @@ function wire() {
     applyStaticI18n($("#auth"));
   };
 
-  $("#demoBtn").onclick = async () => {
-    const u = await Store.seedDemo();
-    Store.setSession(u.id);
-    ME = Store.user(u.id);
-    setLang(ME.language);
-    showApp();
-  };
-
   $("#authLang").onchange = (e) => {
     setLang(e.target.value);
     applyStaticI18n($("#auth"));
@@ -1627,9 +1793,70 @@ function wire() {
     }
   });
 
+  // ------------------------------------------------------- camera FAB
+  const cameraFab = $("#cameraFab");
+  if (cameraFab) {
+    // Show only on mobile (coarse pointer / small screen)
+    const mq = window.matchMedia("(max-width: 680px)");
+    const toggleFab = () => { cameraFab.hidden = !(mq.matches && ME); };
+    mq.addEventListener("change", toggleFab);
+    toggleFab();
+
+    cameraFab.addEventListener("click", () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = "image/*";
+      inp.setAttribute("capture", "environment");
+      inp.onchange = () => {
+        const f = inp.files && inp.files[0];
+        if (!f) return;
+        compressImage(f, 1280, 0.7).then((d) => {
+          // Open a quick "add photo" modal with the captured image
+          const body = el("div", "stack");
+          const preview = el("div", "preview");
+          const img = el("img");
+          img.src = d;
+          preview.appendChild(img);
+          body.appendChild(preview);
+
+          const cap = input("caption");
+          cap.id = "fabCaption";
+          body.appendChild(field("caption", cap));
+
+          const propSel = select("prop", Store.propertiesFor(ME).map((p) => ({
+            value: p.id, label: p.name,
+          })));
+          if (Store.propertiesFor(ME).length) {
+            body.appendChild(field("properties", propSel));
+          }
+
+          const actions = el("div", "modal-actions");
+          actions.appendChild(btn(t("cancel"), "btn ghost", () => closeModal(m)));
+          actions.appendChild(btn(t("save"), "btn", () => {
+            const propId = propSel ? propSel.value : (Store.propertiesFor(ME)[0] || {}).id;
+            if (!propId) { toast(t("no_properties"), "bad"); return; }
+            Store.addPhoto({
+              propertyId: propId, uploaderId: ME.id,
+              dataUrl: d, caption: cap.value, kind: "issue",
+            });
+            closeModal(m);
+            toast(t("saved"), "good");
+            render();
+          }));
+          body.appendChild(actions);
+
+          const m = modal("take_photo", body);
+          document.body.appendChild(m);
+          openModal(m);
+        }).catch(() => toast("Could not read that image", "bad"));
+      };
+      inp.click();
+    });
+  }
+
   // ------------------------------------------------------- mobile events
   // Quick complete from swipe-left gesture
-  document.addEventListener("verde:quickComplete", (e) => {
+  document.addEventListener("habitat:quickComplete", (e) => {
     const task = Store.task(e.detail.taskId);
     if (!task || task.status === "done") return;
     Store.setTaskStatus(task.id, "done", ME.id);
@@ -1639,7 +1866,7 @@ function wire() {
   });
 
   // Cycle status from swipe-right gesture
-  document.addEventListener("verde:cycleStatus", (e) => {
+  document.addEventListener("habitat:cycleStatus", (e) => {
     const task = Store.task(e.detail.taskId);
     if (!task) return;
     const next = task.status === "open" ? "doing" : task.status === "doing" ? "done" : "open";
@@ -1650,7 +1877,7 @@ function wire() {
   });
 
   // Pull-to-refresh
-  document.addEventListener("verde:refresh", () => {
+  document.addEventListener("habitat:refresh", () => {
     render();
     toast(t("saved"), "good");
   });

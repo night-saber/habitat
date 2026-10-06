@@ -1,11 +1,11 @@
-/* Verde — Property Information Hub.
+/* Habitat — Property Information Hub.
  *
  * A comprehensive sub-view for tracking property details: utility locations,
  * system specs, documents, maintenance history, and notes.
  * Rendered inside the property detail area, accessible from property cards.
  */
 "use strict";
-import { Store } from "./store.js";
+import { Store, ROOM_TYPES, APPLIANCE_TYPES, MATERIAL_TYPES } from "./store.js";
 import {
   $, $$, el, esc, btn, field, input, select, textarea, empty, sectionHeader,
   openModal, closeModal, modal, toast, dateLabel, compressImage,
@@ -70,6 +70,9 @@ export function renderPropertyInfo(propId, container) {
   // Sections
   container.appendChild(renderSystemInfoSection(p));
   container.appendChild(renderUtilitiesSection(p));
+  container.appendChild(renderRoomsSection(p));
+  container.appendChild(renderAppliancesSection(p));
+  container.appendChild(renderMaterialsSection(p));
   container.appendChild(renderDocumentsSection(p));
   container.appendChild(renderMaintenanceHistorySection(p));
   container.appendChild(renderPropertyNotesSection(p));
@@ -137,6 +140,186 @@ function renderUtilitiesSection(p) {
       acts.appendChild(btn(t("delete"), "btn ghost sm danger", () => {
         if (!confirm(t("delete_confirm"))) return;
         Store.deleteUtility(p.id, u.id);
+        toast(t("saved"), "good");
+        _render();
+      }));
+    }
+    item.appendChild(acts);
+    list.appendChild(item);
+  });
+  sec.appendChild(list);
+  return sec;
+}
+
+/* ------------------------------------------------------ rooms section */
+function renderRoomsSection(p) {
+  const sec = el("section", "card");
+  sec.appendChild(sectionHeader("rooms", t("add"), () => openRoomModal(p)));
+
+  const rooms = p.rooms || [];
+  if (!rooms.length) {
+    sec.appendChild(el("p", "muted sm", t("no_rooms")));
+    return sec;
+  }
+
+  const list = el("div", "room-list");
+  rooms.forEach((r) => {
+    const item = el("div", "room-item");
+    const head = el("div", "row-between");
+    head.appendChild(el("b", null, r.name || roomTypeLabel(r.type)));
+    head.appendChild(el("span", "pill", roomTypeLabel(r.type)));
+    item.appendChild(head);
+
+    const details = el("div", "room-details");
+    if (r.floorLevel) details.appendChild(el("span", "muted sm", `${t("floor_level")}: ${r.floorLevel}`));
+    if (r.dimensions) details.appendChild(el("span", "muted sm", `${t("dimensions")}: ${r.dimensions}`));
+    if (r.flooring) details.appendChild(el("span", "muted sm", `${t("flooring")}: ${r.flooring}`));
+    if (r.wallColor) details.appendChild(el("span", "muted sm", `${t("wall_color")}: ${r.wallColor}`));
+    if (r.ceilingColor) details.appendChild(el("span", "muted sm", `${t("ceiling_color")}: ${r.ceilingColor}`));
+    if (r.windowType) details.appendChild(el("span", "muted sm", `${t("window_type")}: ${r.windowType}`));
+    if (details.children.length) item.appendChild(details);
+
+    if (r.notes) item.appendChild(el("p", "muted sm", r.notes));
+
+    if (r.photoId) {
+      const photo = Store.photo(r.photoId);
+      if (photo) {
+        const thumb = el("div", "thumb room-thumb");
+        const img = el("img");
+        img.src = photo.dataUrl;
+        img.alt = r.name;
+        img.loading = "lazy";
+        thumb.appendChild(img);
+        item.appendChild(thumb);
+      }
+    }
+
+    const acts = el("div", "card-actions");
+    acts.appendChild(btn(t("edit"), "btn ghost sm", () => openRoomModal(p, r)));
+    if (_me() && _me().role === "owner") {
+      acts.appendChild(btn(t("delete"), "btn ghost sm danger", () => {
+        if (!confirm(t("delete_confirm"))) return;
+        Store.deleteRoom(p.id, r.id);
+        toast(t("saved"), "good");
+        _render();
+      }));
+    }
+    item.appendChild(acts);
+    list.appendChild(item);
+  });
+  sec.appendChild(list);
+  return sec;
+}
+
+/* -------------------------------------------------- appliances section */
+function renderAppliancesSection(p) {
+  const sec = el("section", "card");
+  sec.appendChild(sectionHeader("appliances", t("add"), () => openApplianceModal(p)));
+
+  const appliances = p.appliances || [];
+  if (!appliances.length) {
+    sec.appendChild(el("p", "muted sm", t("no_appliances")));
+    return sec;
+  }
+
+  const list = el("div", "appliance-list");
+  appliances.forEach((a) => {
+    const item = el("div", "appliance-item");
+    const head = el("div", "row-between");
+    head.appendChild(el("b", null, a.name || applianceTypeLabel(a.type)));
+    head.appendChild(el("span", "pill", applianceTypeLabel(a.type)));
+    item.appendChild(head);
+
+    const details = el("div", "appliance-details");
+    if (a.brand) details.appendChild(el("span", "muted sm", `${t("brand")}: ${a.brand}`));
+    if (a.model) details.appendChild(el("span", "muted sm", `${t("model")}: ${a.model}`));
+    if (a.serialNumber) details.appendChild(el("span", "muted sm", `${t("serial_number")}: ${a.serialNumber}`));
+    if (a.yearInstalled) details.appendChild(el("span", "muted sm", `${t("year_installed")}: ${a.yearInstalled}`));
+    if (a.warrantyExpiry) details.appendChild(el("span", "muted sm", `${t("warranty_expiry")}: ${a.warrantyExpiry}`));
+    if (a.room) details.appendChild(el("span", "muted sm", `${t("room")}: ${a.room}`));
+    if (details.children.length) item.appendChild(details);
+
+    if (a.notes) item.appendChild(el("p", "muted sm", a.notes));
+
+    if (a.photoId) {
+      const photo = Store.photo(a.photoId);
+      if (photo) {
+        const thumb = el("div", "thumb appliance-thumb");
+        const img = el("img");
+        img.src = photo.dataUrl;
+        img.alt = a.name;
+        img.loading = "lazy";
+        thumb.appendChild(img);
+        item.appendChild(thumb);
+      }
+    }
+
+    const acts = el("div", "card-actions");
+    acts.appendChild(btn(t("edit"), "btn ghost sm", () => openApplianceModal(p, a)));
+    if (_me() && _me().role === "owner") {
+      acts.appendChild(btn(t("delete"), "btn ghost sm danger", () => {
+        if (!confirm(t("delete_confirm"))) return;
+        Store.deleteAppliance(p.id, a.id);
+        toast(t("saved"), "good");
+        _render();
+      }));
+    }
+    item.appendChild(acts);
+    list.appendChild(item);
+  });
+  sec.appendChild(list);
+  return sec;
+}
+
+/* --------------------------------------------------- materials section */
+function renderMaterialsSection(p) {
+  const sec = el("section", "card");
+  sec.appendChild(sectionHeader("materials", t("add"), () => openMaterialModal(p)));
+
+  const materials = p.materials || [];
+  if (!materials.length) {
+    sec.appendChild(el("p", "muted sm", t("no_materials")));
+    return sec;
+  }
+
+  const list = el("div", "material-list");
+  materials.forEach((m) => {
+    const item = el("div", "material-item");
+    const head = el("div", "row-between");
+    head.appendChild(el("b", null, m.name || materialTypeLabel(m.type)));
+    head.appendChild(el("span", "pill", materialTypeLabel(m.type)));
+    item.appendChild(head);
+
+    const details = el("div", "material-details");
+    if (m.color) details.appendChild(el("span", "muted sm", `${t("color")}: ${m.color}`));
+    if (m.finish) details.appendChild(el("span", "muted sm", `${t("finish")}: ${m.finish}`));
+    if (m.brand) details.appendChild(el("span", "muted sm", `${t("brand")}: ${m.brand}`));
+    if (m.productCode) details.appendChild(el("span", "muted sm", `${t("product_code")}: ${m.productCode}`));
+    if (m.room) details.appendChild(el("span", "muted sm", `${t("room")}: ${m.room}`));
+    if (m.dateInstalled) details.appendChild(el("span", "muted sm", `${t("date_installed")}: ${m.dateInstalled}`));
+    if (details.children.length) item.appendChild(details);
+
+    if (m.notes) item.appendChild(el("p", "muted sm", m.notes));
+
+    if (m.photoId) {
+      const photo = Store.photo(m.photoId);
+      if (photo) {
+        const thumb = el("div", "thumb material-thumb");
+        const img = el("img");
+        img.src = photo.dataUrl;
+        img.alt = m.name;
+        img.loading = "lazy";
+        thumb.appendChild(img);
+        item.appendChild(thumb);
+      }
+    }
+
+    const acts = el("div", "card-actions");
+    acts.appendChild(btn(t("edit"), "btn ghost sm", () => openMaterialModal(p, m)));
+    if (_me() && _me().role === "owner") {
+      acts.appendChild(btn(t("delete"), "btn ghost sm danger", () => {
+        if (!confirm(t("delete_confirm"))) return;
+        Store.deleteMaterial(p.id, m.id);
         toast(t("saved"), "good");
         _render();
       }));
@@ -399,6 +582,285 @@ function openDocumentModal(p, existing = null) {
   openModal(m);
 }
 
+function openRoomModal(p, existing = null) {
+  const editing = !!existing;
+  const body = el("div", "stack");
+
+  const nameInp = input("name", { value: existing ? existing.name : "", placeholder: "e.g. Master Bedroom" });
+  body.appendChild(field("room_name", nameInp));
+
+  const typeSel = select("type", ROOM_TYPES.map((rt) => ({
+    value: rt.value, label: rt.label,
+    selected: existing ? existing.type === rt.value : false,
+  })));
+  body.appendChild(field("room_type", typeSel));
+
+  const floorInp = input("floorLevel", { value: existing ? existing.floorLevel : "", placeholder: "e.g. 1st floor" });
+  body.appendChild(field("floor_level", floorInp));
+
+  const dimInp = input("dimensions", { value: existing ? existing.dimensions : "", placeholder: "e.g. 12x14 ft" });
+  body.appendChild(field("dimensions", dimInp));
+
+  const floorTypeInp = input("flooring", { value: existing ? existing.flooring : "", placeholder: "e.g. Hardwood, Tile, Carpet" });
+  body.appendChild(field("flooring", floorTypeInp));
+
+  const floorColorInp = input("flooringColor", { value: existing ? existing.flooringColor : "", placeholder: "e.g. Oak, Dark Walnut" });
+  body.appendChild(field("flooring_color", floorColorInp));
+
+  const wallColorInp = input("wallColor", { value: existing ? existing.wallColor : "", placeholder: "e.g. Sherwin-Williams SW 7005" });
+  body.appendChild(field("wall_color", wallColorInp));
+
+  const ceilingColorInp = input("ceilingColor", { value: existing ? existing.ceilingColor : "", placeholder: "e.g. Flat White" });
+  body.appendChild(field("ceiling_color", ceilingColorInp));
+
+  const trimColorInp = input("trimColor", { value: existing ? existing.trimColor : "", placeholder: "e.g. Semi-gloss White" });
+  body.appendChild(field("trim_color", trimColorInp));
+
+  const windowTypeInp = input("windowType", { value: existing ? existing.windowType : "", placeholder: "e.g. Double-hung, Casement" });
+  body.appendChild(field("window_type", windowTypeInp));
+
+  const windowCountInp = input("windowCount", { value: existing ? existing.windowCount : "", placeholder: "e.g. 2" });
+  body.appendChild(field("window_count", windowCountInp));
+
+  const notesTa = textarea("notes", { rows: 3 });
+  if (existing) notesTa.value = existing.notes || "";
+  body.appendChild(field("notes", notesTa));
+
+  // Photo upload
+  let photoId = existing ? existing.photoId : null;
+  const preview = el("div", "preview");
+  preview.hidden = true;
+  const fileInp = input("photo", { type: "file" });
+  fileInp.accept = "image/*";
+  fileInp.setAttribute("capture", "environment");
+  fileInp.onchange = () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    compressImage(f, 1280, 0.7).then((d) => {
+      const ph = Store.addPhoto({
+        propertyId: p.id, uploaderId: _me().id, dataUrl: d,
+        caption: nameInp.value || "Room photo", kind: "other",
+      });
+      photoId = ph.id;
+      preview.innerHTML = "";
+      const img = el("img");
+      img.src = d;
+      preview.appendChild(img);
+      preview.hidden = false;
+    }).catch(() => toast("Could not read that image", "bad"));
+  };
+  body.appendChild(field("photo", fileInp));
+  body.appendChild(preview);
+
+  const actions = el("div", "modal-actions");
+  actions.appendChild(btn(t("cancel"), "btn ghost", () => closeModal(m)));
+  actions.appendChild(btn(t("save"), "btn", () => {
+    const data = {
+      name: nameInp.value.trim(),
+      type: typeSel.value,
+      floorLevel: floorInp.value.trim(),
+      dimensions: dimInp.value.trim(),
+      flooring: floorTypeInp.value.trim(),
+      flooringColor: floorColorInp.value.trim(),
+      wallColor: wallColorInp.value.trim(),
+      ceilingColor: ceilingColorInp.value.trim(),
+      trimColor: trimColorInp.value.trim(),
+      windowType: windowTypeInp.value.trim(),
+      windowCount: windowCountInp.value.trim(),
+      notes: notesTa.value.trim(),
+      photoId,
+    };
+    if (editing) Store.updateRoom(p.id, existing.id, data);
+    else Store.addRoom(p.id, data);
+    closeModal(m);
+    toast(t("saved"), "good");
+    _render();
+  }));
+  body.appendChild(actions);
+
+  const m = modal(editing ? "edit" : "add_room", body);
+  document.body.appendChild(m);
+  openModal(m);
+}
+
+function openApplianceModal(p, existing = null) {
+  const editing = !!existing;
+  const body = el("div", "stack");
+
+  const nameInp = input("name", { value: existing ? existing.name : "", placeholder: "e.g. Central AC Unit" });
+  body.appendChild(field("appliance_name", nameInp));
+
+  const typeSel = select("type", APPLIANCE_TYPES.map((at) => ({
+    value: at.value, label: at.label,
+    selected: existing ? existing.type === at.value : false,
+  })));
+  body.appendChild(field("appliance_type", typeSel));
+
+  const brandInp = input("brand", { value: existing ? existing.brand : "", placeholder: "e.g. Carrier, Trane" });
+  body.appendChild(field("brand", brandInp));
+
+  const modelInp = input("model", { value: existing ? existing.model : "", placeholder: "e.g. ABC123" });
+  body.appendChild(field("model", modelInp));
+
+  const serialInp = input("serialNumber", { value: existing ? existing.serialNumber : "", placeholder: "e.g. SN123456789" });
+  body.appendChild(field("serial_number", serialInp));
+
+  const yearInp = input("yearInstalled", { value: existing ? existing.yearInstalled : "", placeholder: "e.g. 2020" });
+  body.appendChild(field("year_installed", yearInp));
+
+  const warrantyInp = input("warrantyExpiry", { value: existing ? existing.warrantyExpiry : "", placeholder: "e.g. 2030-01-01" });
+  body.appendChild(field("warranty_expiry", warrantyInp));
+
+  const roomInp = input("room", { value: existing ? existing.room : "", placeholder: "e.g. Basement" });
+  body.appendChild(field("room", roomInp));
+
+  const notesTa = textarea("notes", { rows: 3 });
+  if (existing) notesTa.value = existing.notes || "";
+  body.appendChild(field("notes", notesTa));
+
+  // Photo upload
+  let photoId = existing ? existing.photoId : null;
+  const preview = el("div", "preview");
+  preview.hidden = true;
+  const fileInp = input("photo", { type: "file" });
+  fileInp.accept = "image/*";
+  fileInp.setAttribute("capture", "environment");
+  fileInp.onchange = () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    compressImage(f, 1280, 0.7).then((d) => {
+      const ph = Store.addPhoto({
+        propertyId: p.id, uploaderId: _me().id, dataUrl: d,
+        caption: nameInp.value || "Appliance photo", kind: "other",
+      });
+      photoId = ph.id;
+      preview.innerHTML = "";
+      const img = el("img");
+      img.src = d;
+      preview.appendChild(img);
+      preview.hidden = false;
+    }).catch(() => toast("Could not read that image", "bad"));
+  };
+  body.appendChild(field("photo", fileInp));
+  body.appendChild(preview);
+
+  const actions = el("div", "modal-actions");
+  actions.appendChild(btn(t("cancel"), "btn ghost", () => closeModal(m)));
+  actions.appendChild(btn(t("save"), "btn", () => {
+    const data = {
+      name: nameInp.value.trim(),
+      type: typeSel.value,
+      brand: brandInp.value.trim(),
+      model: modelInp.value.trim(),
+      serialNumber: serialInp.value.trim(),
+      yearInstalled: yearInp.value.trim(),
+      warrantyExpiry: warrantyInp.value.trim(),
+      room: roomInp.value.trim(),
+      notes: notesTa.value.trim(),
+      photoId,
+    };
+    if (editing) Store.updateAppliance(p.id, existing.id, data);
+    else Store.addAppliance(p.id, data);
+    closeModal(m);
+    toast(t("saved"), "good");
+    _render();
+  }));
+  body.appendChild(actions);
+
+  const m = modal(editing ? "edit" : "add_appliance", body);
+  document.body.appendChild(m);
+  openModal(m);
+}
+
+function openMaterialModal(p, existing = null) {
+  const editing = !!existing;
+  const body = el("div", "stack");
+
+  const nameInp = input("name", { value: existing ? existing.name : "", placeholder: "e.g. Kitchen Countertop" });
+  body.appendChild(field("material_name", nameInp));
+
+  const typeSel = select("type", MATERIAL_TYPES.map((mt) => ({
+    value: mt.value, label: mt.label,
+    selected: existing ? existing.type === mt.value : false,
+  })));
+  body.appendChild(field("material_type", typeSel));
+
+  const colorInp = input("color", { value: existing ? existing.color : "", placeholder: "e.g. Navajo White" });
+  body.appendChild(field("color", colorInp));
+
+  const finishInp = input("finish", { value: existing ? existing.finish : "", placeholder: "e.g. Matte, Gloss" });
+  body.appendChild(field("finish", finishInp));
+
+  const brandInp = input("brand", { value: existing ? existing.brand : "", placeholder: "e.g. Benjamin Moore" });
+  body.appendChild(field("brand", brandInp));
+
+  const productCodeInp = input("productCode", { value: existing ? existing.productCode : "", placeholder: "e.g. BM-OC-15" });
+  body.appendChild(field("product_code", productCodeInp));
+
+  const roomInp = input("room", { value: existing ? existing.room : "", placeholder: "e.g. Kitchen" });
+  body.appendChild(field("room", roomInp));
+
+  const dateInp = input("dateInstalled", { type: "date", value: existing ? (existing.dateInstalled || "") : "" });
+  body.appendChild(field("date_installed", dateInp));
+
+  const notesTa = textarea("notes", { rows: 3 });
+  if (existing) notesTa.value = existing.notes || "";
+  body.appendChild(field("notes", notesTa));
+
+  // Photo upload
+  let photoId = existing ? existing.photoId : null;
+  const preview = el("div", "preview");
+  preview.hidden = true;
+  const fileInp = input("photo", { type: "file" });
+  fileInp.accept = "image/*";
+  fileInp.setAttribute("capture", "environment");
+  fileInp.onchange = () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    compressImage(f, 1280, 0.7).then((d) => {
+      const ph = Store.addPhoto({
+        propertyId: p.id, uploaderId: _me().id, dataUrl: d,
+        caption: nameInp.value || "Material photo", kind: "other",
+      });
+      photoId = ph.id;
+      preview.innerHTML = "";
+      const img = el("img");
+      img.src = d;
+      preview.appendChild(img);
+      preview.hidden = false;
+    }).catch(() => toast("Could not read that image", "bad"));
+  };
+  body.appendChild(field("photo", fileInp));
+  body.appendChild(preview);
+
+  const actions = el("div", "modal-actions");
+  actions.appendChild(btn(t("cancel"), "btn ghost", () => closeModal(m)));
+  actions.appendChild(btn(t("save"), "btn", () => {
+    const data = {
+      name: nameInp.value.trim(),
+      type: typeSel.value,
+      color: colorInp.value.trim(),
+      finish: finishInp.value.trim(),
+      brand: brandInp.value.trim(),
+      productCode: productCodeInp.value.trim(),
+      room: roomInp.value.trim(),
+      dateInstalled: dateInp.value || null,
+      notes: notesTa.value.trim(),
+      photoId,
+    };
+    if (editing) Store.updateMaterial(p.id, existing.id, data);
+    else Store.addMaterial(p.id, data);
+    closeModal(m);
+    toast(t("saved"), "good");
+    _render();
+  }));
+  body.appendChild(actions);
+
+  const m = modal(editing ? "edit" : "add_material", body);
+  document.body.appendChild(m);
+  openModal(m);
+}
+
 function openPropertyNotesModal(p) {
   const body = el("div", "stack");
   const notesTa = textarea("notes", { rows: 5 });
@@ -421,6 +883,21 @@ function openPropertyNotesModal(p) {
 }
 
 /* --------------------------------------------------------- helpers */
+function roomTypeLabel(type) {
+  const found = ROOM_TYPES.find((r) => r.value === type);
+  return found ? found.label : type;
+}
+
+function applianceTypeLabel(type) {
+  const found = APPLIANCE_TYPES.find((a) => a.value === type);
+  return found ? found.label : type;
+}
+
+function materialTypeLabel(type) {
+  const found = MATERIAL_TYPES.find((m) => m.value === type);
+  return found ? found.label : type;
+}
+
 function utilityIcon(type) {
   const icons = {
     water_shutoff: "💧",

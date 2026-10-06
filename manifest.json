@@ -1,7 +1,7 @@
 {
-  "name": "Verde — Landscaping, organised",
-  "short_name": "Verde",
-  "description": "Verde connects land owners and gardeners: photo change requests, a live map of every job, crews, and automatic translation.",
+  "name": "Habitat — Property, organised",
+  "short_name": "Habitat",
+  "description": "Habitat connects property owners and trade workers: photo change requests, a live map of every job, crews, and automatic translation.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#08110e",
