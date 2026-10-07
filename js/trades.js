@@ -429,3 +429,4 @@ const TERMINOLOGY = {
     { home: "flare reducer", trade: "inspect flare reducer" },
     { home: "flare coupling", trade: "inspect flare coupling" },
   ],
+};
