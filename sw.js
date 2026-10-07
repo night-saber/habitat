@@ -1,7 +1,7 @@
 /* Habitat — service worker for offline support. */
 "use strict";
 
-const CACHE_NAME = "habitat-v2";
+const CACHE_NAME = "habitat-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -49,7 +49,19 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Cache-first for same-origin requests
+  // Network-first for HTML (always get latest)
+  if (e.request.mode === "navigate" || url.pathname.endsWith(".html") || url.pathname === "/") {
+    e.respondWith(
+      fetch(e.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        return response;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (JS, CSS, images)
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) return cached;
